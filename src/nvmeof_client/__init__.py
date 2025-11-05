@@ -1,0 +1,55 @@
+"""
+NVMe-oF TCP Client Library
+
+A Python library for implementing an NVMe over Fabrics (NVMe-oF) client using TCP transport.
+This library provides synchronous communication with NVMe-oF targets following the
+NVMe-oF TCP Transport Specification.
+
+Author: Generated with Claude Code
+Version: 1.0.0
+"""
+
+from .client import NVMeoFClient
+from .exceptions import (
+    NVMeoFError,
+    NVMeoFConnectionError,
+    NVMeoFTimeoutError,
+    ConnectionError,
+    TimeoutError,
+    CommandError,
+    ProtocolError
+)
+from .models import (
+    ControllerInfo,
+    NamespaceInfo,
+    DiscoveryEntry,
+    ConnectionInfo,
+    QueueInfo,
+    ControllerCapabilities,
+    ControllerStatus,
+    ANAState,
+    ANAGroupDescriptor,
+    ANALogPage
+)
+
+__version__ = "1.0.0"
+__all__ = [
+    "NVMeoFClient",
+    "NVMeoFError",
+    "NVMeoFConnectionError",
+    "NVMeoFTimeoutError",
+    "ConnectionError",
+    "TimeoutError",
+    "CommandError",
+    "ProtocolError",
+    "ControllerInfo",
+    "NamespaceInfo",
+    "DiscoveryEntry",
+    "ConnectionInfo",
+    "QueueInfo",
+    "ControllerCapabilities",
+    "ControllerStatus",
+    "ANAState",
+    "ANAGroupDescriptor",
+    "ANALogPage"
+]
