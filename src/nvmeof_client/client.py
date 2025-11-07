@@ -3572,10 +3572,58 @@ class NVMeoFClient:
         return data
 
     def _send_termination_pdu(self) -> None:
-        """Send termination PDU for graceful disconnection."""
+        """
+        Send Host to Controller Terminate Connection Request (H2CTermReq) PDU.
+
+        Used for graceful disconnection from the controller.
+
+        Reference: NVMe-oF TCP Transport Specification Rev 1.2, Section 3.6.2.4, Figure 28
+        "Host to Controller Terminate Connection Request PDU (H2CTermReq)"
+
+        PDU Structure (24 bytes total):
+          Bytes 00-07: Common Header (CH)
+            - PDU Type: 02h (H2C_TERM)
+            - Flags: 0 (Reserved)
+            - HLEN: 24 (0x18) - Fixed length per spec
+            - PDO: 0 (Reserved)
+            - PLEN: 24 (0x18) - No additional data for graceful disconnect
+          Bytes 08-09: Fatal Error Status (FES) - 0x0000 for graceful disconnect
+          Bytes 10-13: Fatal Error Information (FEI) - 0x00000000 (not applicable)
+          Bytes 14-23: Reserved - must be zero
+        """
         try:
-            self._send_pdu(PDUType.H2C_TERM, b'')
-        except Exception:
+            if not self._socket:
+                return
+
+            # Build 24-byte H2CTermReq PDU
+            # Common header: 8 bytes
+            pdu_data = bytearray(24)
+            pdu_data[0] = PDUType.H2C_TERM  # PDU Type: 02h
+            pdu_data[1] = 0                  # Flags: Reserved
+            pdu_data[2] = 24                 # HLEN: Fixed length of 24 bytes (18h)
+            pdu_data[3] = 0                  # PDO: Reserved
+            pdu_data[4] = 24                 # PLEN: 24 bytes (low byte)
+            pdu_data[5] = 0                  # PLEN: (mid byte)
+            pdu_data[6] = 0                  # PLEN: (high byte)
+            pdu_data[7] = 0                  # Reserved
+
+            # Protocol Specific Header (PSH): bytes 8-23
+            # Bytes 08-09: Fatal Error Status (FES) = 0x0000 (no error, graceful disconnect)
+            pdu_data[8] = 0
+            pdu_data[9] = 0
+
+            # Bytes 10-13: Fatal Error Information (FEI) = 0x00000000 (not applicable)
+            pdu_data[10] = 0
+            pdu_data[11] = 0
+            pdu_data[12] = 0
+            pdu_data[13] = 0
+
+            # Bytes 14-23: Reserved (already zero from bytearray initialization)
+
+            self._socket.sendall(bytes(pdu_data))
+            self._logger.debug("Sent H2CTermReq PDU for graceful disconnection")
+        except Exception as e:
+            self._logger.debug(f"Failed to send termination PDU: {e}")
             pass  # Best effort termination
 
     def _get_next_admin_command_id(self) -> int:

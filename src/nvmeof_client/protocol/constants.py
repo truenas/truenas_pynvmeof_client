@@ -84,6 +84,11 @@ NVME_LBAF_RP_SHIFT = 24                 # Relative Performance bit shift
 # PDU Header Sizes for NVMe-oF TCP
 # Reference: NVMe-oF TCP Transport Specification Section 3.3 "PDU Format"
 NVMEOF_TCP_PDU_BASIC_HEADER_LEN = 8    # Basic PDU header length (all PDU types)
+
+# ICREQ/ICRESP PDU Sizes
+# Reference: NVMe-oF TCP Transport Specification Rev 1.2, Section 3.6.2.2-3, Figures 26-27
+# "Header Length (HLEN): Fixed length of 128 bytes (80h)."
+# "PDU Length (PLEN): Fixed length of 128 bytes (80h)."
 NVMEOF_TCP_ICREQ_HEADER_LEN = 128      # ICREQ header length (extended header)
 NVMEOF_TCP_ICREQ_TOTAL_LEN = 128       # ICREQ total PDU length
 NVMEOF_TCP_CMD_HEADER_LEN = 72         # Command PDU header length
