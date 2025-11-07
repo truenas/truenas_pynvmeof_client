@@ -133,7 +133,13 @@ class TestNVMeoFClient(unittest.TestCase):
 
     @patch('socket.socket')
     def test_disconnect(self, mock_socket_class):
-        """Test disconnection."""
+        """Test disconnection follows NVMe-oF TCP protocol.
+
+        Per spec Section 3.5, normal graceful disconnect should:
+        1. Delete I/O queues via admin commands
+        2. Close TCP connection
+        3. NOT send H2CTermReq PDU (reserved for fatal errors only)
+        """
         mock_socket = Mock()
         self.client._socket = mock_socket
         self.client._connected = True
@@ -143,9 +149,16 @@ class TestNVMeoFClient(unittest.TestCase):
 
         self.client.disconnect()
 
-        # Should have sent termination PDU (sendall called at least once)
-        mock_socket.sendall.assert_called()
+        # Verify I/O queues were cleaned up
+        self.client.cleanup_io_queues.assert_called_once()
+
+        # Should NOT send H2CTermReq PDU for normal disconnect
+        mock_socket.sendall.assert_not_called()
+
+        # Should close the socket
         mock_socket.close.assert_called_once()
+
+        # Verify connection state is cleaned up
         self.assertFalse(self.client.is_connected)
         self.assertIsNone(self.client._socket)
 

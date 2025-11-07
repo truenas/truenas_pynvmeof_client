@@ -230,9 +230,12 @@ class NVMeoFClient:
         """
         Close connection to NVMe-oF target.
 
-        Performs graceful shutdown including sending termination PDU if needed.
+        Performs graceful shutdown by deleting I/O queues via admin commands,
+        then closing the TCP connection. Per NVMe-oF TCP spec Section 3.5
+        "Error Handling Model", H2CTermReq PDU is reserved for fatal error
+        scenarios only, not normal graceful disconnection.
 
-        Reference: NVMe-oF TCP Transport Specification Section 3.2
+        Reference: NVMe-oF TCP Transport Specification Rev 1.2, Section 3.5
         """
         if not self._connected:
             return
@@ -246,12 +249,8 @@ class NVMeoFClient:
             except Exception as e:
                 self._logger.warning(f"Failed to clean up I/O queues: {e}")
 
-            # Send termination PDU for graceful shutdown
-            if self._socket:
-                try:
-                    self._send_termination_pdu()
-                except Exception as e:
-                    self._logger.warning(f"Failed to send termination PDU: {e}")
+            # For normal graceful disconnect, simply close the TCP connection
+            # H2CTermReq PDU is only for fatal transport errors (see Section 3.5)
 
         finally:
             self._cleanup_socket()
