@@ -33,6 +33,7 @@ from .parsers import (
 from .protocol import (
     # Types and Enums
     PDUType,
+    PDUFlags,
     NVMeProperty,
     LogPageIdentifier,
     IdentifyDataStructure,
@@ -495,22 +496,38 @@ class NVMeoFClient:
                 identify_data = first_data
                 self._logger.debug(f"Received identify controller data: {len(identify_data)} bytes")
 
-                # Try to receive the completion PDU
-                try:
-                    response_header, response_data = self._receive_pdu()
-                    self._logger.debug(
-                        f"Received completion PDU: type={response_header.pdu_type}, len={len(response_data)}")
-
-                    if response_header.pdu_type != PDUType.RSP:
+                # Check for C2H SUCCESS flag (C2H success optimization)
+                # Reference: NVMe-oF TCP Transport Specification Rev 1.2,
+                # Section 3.3.2.1 (lines 888-900), Figure 33 (lines 2423-2427)
+                if first_header.flags & PDUFlags.SCSS:
+                    # SUCCESS flag set - command completed successfully, no CapsuleResp follows
+                    # Validate: SUCCESS requires LAST_PDU (protocol requirement)
+                    if not (first_header.flags & PDUFlags.LAST_PDU):
+                        # Fatal protocol error per spec (lines 898-900)
                         raise ProtocolError(
-                            f"Expected response PDU, got type {response_header.pdu_type}")
+                            f"C2HData PDU has SUCCESS flag without LAST_PDU flag - "
+                            f"protocol violation (flags=0x{first_header.flags:02x})")
 
-                    # Parse the completion entry to check status
-                    response = ResponseParser.parse_response(response_data, command_id)
-                except Exception as e:
-                    self._logger.warning(f"Failed to receive completion PDU: {e}")
-                    # Some targets may close connection after sending data
+                    self._logger.debug("C2HData PDU has SUCCESS flag - command completed successfully")
+                    # Synthesize successful completion (status=0) per spec
                     response = {'status': 0}
+                else:
+                    # SUCCESS flag not set - wait for CapsuleResp with actual status
+                    try:
+                        response_header, response_data = self._receive_pdu()
+                        self._logger.debug(
+                            f"Received completion PDU: type={response_header.pdu_type}, len={len(response_data)}")
+
+                        if response_header.pdu_type != PDUType.RSP:
+                            raise ProtocolError(
+                                f"Expected response PDU, got type {response_header.pdu_type}")
+
+                        # Parse the completion entry to check status
+                        response = ResponseParser.parse_response(response_data, command_id)
+                    except Exception as e:
+                        self._logger.warning(f"Failed to receive completion PDU: {e}")
+                        # Some targets may close connection after sending data
+                        response = {'status': 0}
 
             elif first_header.pdu_type == PDUType.RSP:
                 # Completion first (less common)
@@ -681,26 +698,42 @@ class NVMeoFClient:
                 identify_data = first_data
                 self._logger.debug(f"Received identify namespace data: {len(identify_data)} bytes")
 
-                # Try to receive the completion PDU
-                try:
-                    response_header, response_data = self._receive_pdu()
-                    self._logger.debug(
-                        f"Received completion PDU: type={response_header.pdu_type}, len={len(response_data)}")
-
-                    if response_header.pdu_type != PDUType.RSP:
+                # Check for C2H SUCCESS flag (C2H success optimization)
+                # Reference: NVMe-oF TCP Transport Specification Rev 1.2,
+                # Section 3.3.2.1 (lines 888-900), Figure 33 (lines 2423-2427)
+                if first_header.flags & PDUFlags.SCSS:
+                    # SUCCESS flag set - command completed successfully, no CapsuleResp follows
+                    # Validate: SUCCESS requires LAST_PDU (protocol requirement)
+                    if not (first_header.flags & PDUFlags.LAST_PDU):
+                        # Fatal protocol error per spec (lines 898-900)
                         raise ProtocolError(
-                            f"Expected response PDU, got type {response_header.pdu_type}")
+                            f"C2HData PDU has SUCCESS flag without LAST_PDU flag - "
+                            f"protocol violation (flags=0x{first_header.flags:02x})")
 
-                    # Parse the completion entry to check status
-                    response = ResponseParser.parse_response(response_data, command_id)
-                    if response['status'] != 0:
-                        raise CommandError(
-                            f"Identify Namespace failed with status {response['status']:02x}",
-                            response['status'], command_id)
-                except Exception as e:
-                    self._logger.warning(f"Failed to receive completion PDU: {e}")
-                    # Some targets may close connection after sending data
+                    self._logger.debug("C2HData PDU has SUCCESS flag - command completed successfully")
+                    # Synthesize successful completion (status=0) per spec
                     response = {'status': 0}
+                else:
+                    # SUCCESS flag not set - wait for CapsuleResp with actual status
+                    try:
+                        response_header, response_data = self._receive_pdu()
+                        self._logger.debug(
+                            f"Received completion PDU: type={response_header.pdu_type}, len={len(response_data)}")
+
+                        if response_header.pdu_type != PDUType.RSP:
+                            raise ProtocolError(
+                                f"Expected response PDU, got type {response_header.pdu_type}")
+
+                        # Parse the completion entry to check status
+                        response = ResponseParser.parse_response(response_data, command_id)
+                        if response['status'] != 0:
+                            raise CommandError(
+                                f"Identify Namespace failed with status {response['status']:02x}",
+                                response['status'], command_id)
+                    except Exception as e:
+                        self._logger.warning(f"Failed to receive completion PDU: {e}")
+                        # Some targets may close connection after sending data
+                        response = {'status': 0}
 
             elif first_header.pdu_type == PDUType.RSP:
                 # Completion first (less common)
@@ -779,26 +812,42 @@ class NVMeoFClient:
                 identify_data = first_data
                 self._logger.debug(f"Received namespace list data: {len(identify_data)} bytes")
 
-                # Try to receive the completion PDU
-                try:
-                    response_header, response_data = self._receive_pdu()
-                    self._logger.debug(
-                        f"Received completion PDU: type={response_header.pdu_type}, len={len(response_data)}")
-
-                    if response_header.pdu_type != PDUType.RSP:
+                # Check for C2H SUCCESS flag (C2H success optimization)
+                # Reference: NVMe-oF TCP Transport Specification Rev 1.2,
+                # Section 3.3.2.1 (lines 888-900), Figure 33 (lines 2423-2427)
+                if first_header.flags & PDUFlags.SCSS:
+                    # SUCCESS flag set - command completed successfully, no CapsuleResp follows
+                    # Validate: SUCCESS requires LAST_PDU (protocol requirement)
+                    if not (first_header.flags & PDUFlags.LAST_PDU):
+                        # Fatal protocol error per spec (lines 898-900)
                         raise ProtocolError(
-                            f"Expected response PDU, got type {response_header.pdu_type}")
+                            f"C2HData PDU has SUCCESS flag without LAST_PDU flag - "
+                            f"protocol violation (flags=0x{first_header.flags:02x})")
 
-                    # Parse the completion entry to check status
-                    response = ResponseParser.parse_response(response_data, command_id)
-                    if response['status'] != 0:
-                        raise CommandError(
-                            f"Identify Namespace List failed with status {response['status']:02x}",
-                            response['status'], command_id)
-                except Exception as e:
-                    self._logger.warning(f"Failed to receive completion PDU: {e}")
-                    # Some targets may close connection after sending data
+                    self._logger.debug("C2HData PDU has SUCCESS flag - command completed successfully")
+                    # Synthesize successful completion (status=0) per spec
                     response = {'status': 0}
+                else:
+                    # SUCCESS flag not set - wait for CapsuleResp with actual status
+                    try:
+                        response_header, response_data = self._receive_pdu()
+                        self._logger.debug(
+                            f"Received completion PDU: type={response_header.pdu_type}, len={len(response_data)}")
+
+                        if response_header.pdu_type != PDUType.RSP:
+                            raise ProtocolError(
+                                f"Expected response PDU, got type {response_header.pdu_type}")
+
+                        # Parse the completion entry to check status
+                        response = ResponseParser.parse_response(response_data, command_id)
+                        if response['status'] != 0:
+                            raise CommandError(
+                                f"Identify Namespace List failed with status {response['status']:02x}",
+                                response['status'], command_id)
+                    except Exception as e:
+                        self._logger.warning(f"Failed to receive completion PDU: {e}")
+                        # Some targets may close connection after sending data
+                        response = {'status': 0}
 
             elif first_header.pdu_type == PDUType.RSP:
                 # Completion first (less common)
@@ -1030,22 +1079,38 @@ class NVMeoFClient:
                 log_data = first_data
                 self._logger.debug("Received log page data: %d bytes", len(log_data))
 
-                # Receive the completion PDU
-                response_header, response_data = self._receive_pdu()
-                self._logger.debug(
-                    "Received completion PDU: type=%s, len=%d",
-                    response_header.pdu_type, len(response_data))
+                # Check for C2H SUCCESS flag (C2H success optimization)
+                # Reference: NVMe-oF TCP Transport Specification Rev 1.2,
+                # Section 3.3.2.1 (lines 888-900), Figure 33 (lines 2423-2427)
+                if first_header.flags & PDUFlags.SCSS:
+                    # SUCCESS flag set - command completed successfully, no CapsuleResp follows
+                    # Validate: SUCCESS requires LAST_PDU (protocol requirement)
+                    if not (first_header.flags & PDUFlags.LAST_PDU):
+                        # Fatal protocol error per spec (lines 898-900)
+                        raise ProtocolError(
+                            f"C2HData PDU has SUCCESS flag without LAST_PDU flag - "
+                            f"protocol violation (flags=0x{first_header.flags:02x})")
 
-                if response_header.pdu_type != PDUType.RSP:
-                    raise ProtocolError(
-                        f"Expected response PDU, got type {response_header.pdu_type}")
+                    self._logger.debug("C2HData PDU has SUCCESS flag - command completed successfully")
+                    # Synthesize successful completion (status=0) per spec
+                    # No need to wait for CapsuleResp
+                else:
+                    # SUCCESS flag not set - wait for CapsuleResp with actual status
+                    response_header, response_data = self._receive_pdu()
+                    self._logger.debug(
+                        "Received completion PDU: type=%s, len=%d",
+                        response_header.pdu_type, len(response_data))
 
-                # Parse completion to check status
-                response = ResponseParser.parse_response(response_data, command_id)
-                if response['status'] != 0:
-                    raise CommandError(
-                        f"Get Log Page command failed with status 0x{response['status']:04x}",
-                        response['status'], command_id)
+                    if response_header.pdu_type != PDUType.RSP:
+                        raise ProtocolError(
+                            f"Expected response PDU, got type {response_header.pdu_type}")
+
+                    # Parse completion to check status
+                    response = ResponseParser.parse_response(response_data, command_id)
+                    if response['status'] != 0:
+                        raise CommandError(
+                            f"Get Log Page command failed with status 0x{response['status']:04x}",
+                            response['status'], command_id)
 
             elif first_header.pdu_type == PDUType.RSP:
                 # Response with no data
@@ -1399,20 +1464,36 @@ class NVMeoFClient:
                 read_data = data_payload
                 self._logger.debug(f"Received read data: {len(read_data)} bytes")
 
-                # Try to receive completion PDU
-                try:
-                    response_header, response_data = self._receive_pdu_on_socket(self._io_socket)
-                    if response_header.pdu_type == PDUType.RSP:
-                        response = ResponseParser.parse_response(response_data, command_id)
-                        if response['status'] != 0:
-                            raise CommandError(
-                                f"Read command failed with status {response['status']:02x}",
-                                response['status'], command_id)
-                except Exception as e:
-                    self._logger.warning(f"Failed to receive completion PDU: {e}")
-                    # Some targets may close connection after data transfer
+                # Check for C2H SUCCESS flag (C2H success optimization)
+                # Reference: NVMe-oF TCP Transport Specification Rev 1.2,
+                # Section 3.3.2.1 (lines 888-900), Figure 33 (lines 2423-2427)
+                if data_header.flags & PDUFlags.SCSS:
+                    # SUCCESS flag set - command completed successfully, no CapsuleResp follows
+                    # Validate: SUCCESS requires LAST_PDU (protocol requirement)
+                    if not (data_header.flags & PDUFlags.LAST_PDU):
+                        # Fatal protocol error per spec (lines 898-900)
+                        raise ProtocolError(
+                            f"C2HData PDU has SUCCESS flag without LAST_PDU flag - "
+                            f"protocol violation (flags=0x{data_header.flags:02x})")
 
-                return read_data
+                    self._logger.debug("C2HData PDU has SUCCESS flag - command completed successfully")
+                    # Synthesize successful completion (status=0) per spec
+                    return read_data
+                else:
+                    # SUCCESS flag not set - wait for CapsuleResp with actual status
+                    try:
+                        response_header, response_data = self._receive_pdu_on_socket(self._io_socket)
+                        if response_header.pdu_type == PDUType.RSP:
+                            response = ResponseParser.parse_response(response_data, command_id)
+                            if response['status'] != 0:
+                                raise CommandError(
+                                    f"Read command failed with status {response['status']:02x}",
+                                    response['status'], command_id)
+                    except Exception as e:
+                        self._logger.warning(f"Failed to receive completion PDU: {e}")
+                        # Some targets may close connection after data transfer
+
+                    return read_data
 
             elif data_header.pdu_type == PDUType.RSP:
                 # Completion first, then data (less common)
@@ -1895,17 +1976,42 @@ class NVMeoFClient:
 
             if data_header.pdu_type == PDUType.C2H_DATA:
                 self._logger.debug(f"Received {len(data_payload)} bytes of reservation data")
-                # Receive completion response from I/O socket
-                response_header, response_data = self._receive_pdu_on_socket(self._io_socket)
+
+                # Check for C2H SUCCESS flag (C2H success optimization)
+                # Reference: NVMe-oF TCP Transport Specification Rev 1.2,
+                # Section 3.3.2.1 (lines 888-900), Figure 33 (lines 2423-2427)
+                if data_header.flags & PDUFlags.SCSS:
+                    # SUCCESS flag set - command completed successfully, no CapsuleResp follows
+                    # Validate: SUCCESS requires LAST_PDU (protocol requirement)
+                    if not (data_header.flags & PDUFlags.LAST_PDU):
+                        # Fatal protocol error per spec (lines 898-900)
+                        raise ProtocolError(
+                            f"C2HData PDU has SUCCESS flag without LAST_PDU flag - "
+                            f"protocol violation (flags=0x{data_header.flags:02x})")
+
+                    self._logger.debug("C2HData PDU has SUCCESS flag - command completed successfully")
+                    # Synthesize successful completion (status=0) per spec
+                    status_code = 0
+                else:
+                    # SUCCESS flag not set - wait for CapsuleResp with actual status
+                    # Receive completion response from I/O socket
+                    response_header, response_data = self._receive_pdu_on_socket(self._io_socket)
+
+                    if response_header.pdu_type == PDUType.RSP:
+                        response = ResponseParser.parse_response(response_data, command_id)
+                        status_code = response['status']
+
+                        if status_code != 0:
+                            raise CommandError(
+                                f"Reservation report failed with status {status_code:02x}",
+                                status_code, command_id)
+                    else:
+                        raise ProtocolError(
+                            f"Expected RSP PDU after C2H_DATA, got type {response_header.pdu_type}")
+
             elif data_header.pdu_type == PDUType.RSP:
                 # No data returned, command failed - this is the response header and data
                 response_header, response_data = data_header, data_payload
-            else:
-                raise ProtocolError(
-                    "Expected C2H_DATA or RSP PDU for reservation report, "
-                    f"got type {data_header.pdu_type}")
-
-            if response_header.pdu_type == PDUType.RSP:
                 response = ResponseParser.parse_response(response_data, command_id)
                 status_code = response['status']
 
@@ -1914,9 +2020,15 @@ class NVMeoFClient:
                         f"Reservation report failed with status {status_code:02x}",
                         status_code, command_id)
 
-                # Only parse data if we received C2H_DATA
-                if data_header.pdu_type != PDUType.C2H_DATA:
-                    raise ProtocolError("No reservation data received")
+                # No data was received
+                raise ProtocolError("No reservation data received")
+            else:
+                raise ProtocolError(
+                    "Expected C2H_DATA or RSP PDU for reservation report, "
+                    f"got type {data_header.pdu_type}")
+
+            # At this point, we have data_payload with reservation data and status_code = 0
+            if data_header.pdu_type == PDUType.C2H_DATA:
 
                 # Parse reservation report data using the new parser
                 if len(data_payload) < 24:
@@ -2481,27 +2593,43 @@ class NVMeoFClient:
                 log_data = first_data
                 self._logger.debug(f"Received discovery log data: {len(log_data)} bytes")
 
-                # Try to receive the completion PDU
-                try:
-                    response_header, response_data = self._receive_pdu()
-                    self._logger.debug(
-                        f"Received completion PDU: type={response_header.pdu_type}, len={len(response_data)}")
-
-                    if response_header.pdu_type != PDUType.RSP:
+                # Check for C2H SUCCESS flag (C2H success optimization)
+                # Reference: NVMe-oF TCP Transport Specification Rev 1.2,
+                # Section 3.3.2.1 (lines 888-900), Figure 33 (lines 2423-2427)
+                if first_header.flags & PDUFlags.SCSS:
+                    # SUCCESS flag set - command completed successfully, no CapsuleResp follows
+                    # Validate: SUCCESS requires LAST_PDU (protocol requirement)
+                    if not (first_header.flags & PDUFlags.LAST_PDU):
+                        # Fatal protocol error per spec (lines 898-900)
                         raise ProtocolError(
-                            f"Expected response PDU, got type {response_header.pdu_type}")
+                            f"C2HData PDU has SUCCESS flag without LAST_PDU flag - "
+                            f"protocol violation (flags=0x{first_header.flags:02x})")
 
-                    # Parse the completion entry to check status
-                    response = ResponseParser.parse_response(response_data, command_id)
-                    if response['status'] != 0:
-                        raise CommandError(
-                            f"Get Log Page failed with status {response['status']:02x}",
-                            response['status'], command_id)
-                except Exception as e:
-                    self._logger.warning(f"Failed to receive completion PDU (target may have closed connection): {e}")
-                    # Some targets send only data and close connection for discovery
-                    # Assume success if we got valid data
+                    self._logger.debug("C2HData PDU has SUCCESS flag - command completed successfully")
+                    # Synthesize successful completion (status=0) per spec
                     response = {'status': 0}
+                else:
+                    # SUCCESS flag not set - wait for CapsuleResp with actual status
+                    try:
+                        response_header, response_data = self._receive_pdu()
+                        self._logger.debug(
+                            f"Received completion PDU: type={response_header.pdu_type}, len={len(response_data)}")
+
+                        if response_header.pdu_type != PDUType.RSP:
+                            raise ProtocolError(
+                                f"Expected response PDU, got type {response_header.pdu_type}")
+
+                        # Parse the completion entry to check status
+                        response = ResponseParser.parse_response(response_data, command_id)
+                        if response['status'] != 0:
+                            raise CommandError(
+                                f"Get Log Page failed with status {response['status']:02x}",
+                                response['status'], command_id)
+                    except Exception as e:
+                        self._logger.warning("Failed to receive completion PDU (target may have closed): %s", e)
+                        # Some targets send only data and close connection for discovery
+                        # Assume success if we got valid data
+                        response = {'status': 0}
 
             elif first_header.pdu_type == PDUType.RSP:
                 # Old order: completion first, then data

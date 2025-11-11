@@ -200,6 +200,25 @@ class ControllerConfiguration:
         )
 
 
+class PDUFlags:
+    """
+    NVMe-oF TCP PDU FLAGS field bit definitions.
+
+    Reference: NVM Express NVMe-oF TCP Transport Specification Rev 1.2,
+    Section 3.6.2 (PDU Definitions), Figure 33 (C2HData PDU)
+    """
+    # Common flags for multiple PDU types
+    HDGSTF = 0x01  # Bit 0: PDU Header Digest Flag
+    DDGSTF = 0x02  # Bit 1: PDU Data Digest Flag
+
+    # C2HData PDU specific flags (Figure 33, lines 2423-2438)
+    LAST_PDU = 0x04     # Bit 2: Last PDU in data transfer
+    SCSS = 0x08         # Bit 3: SUCCESS - Command completed successfully, no CapsuleResp follows
+
+    # H2CData PDU specific flags
+    H2C_DATA_LAST = 0x04  # Bit 2: Last PDU in data transfer
+
+
 class PDUHeader(NamedTuple):
     """NVMe-oF TCP PDU Header structure."""
     pdu_type: int
