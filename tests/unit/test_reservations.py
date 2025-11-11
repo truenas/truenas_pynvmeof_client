@@ -329,7 +329,7 @@ class TestReservationMethodMockedExecution(unittest.TestCase):
 
         # Mock responses: data first, then completion
         mock_receive.side_effect = [
-            (Mock(pdu_type=PDUType.C2H_DATA), report_data),
+            (Mock(pdu_type=PDUType.C2H_DATA, flags=0), report_data),
             (Mock(pdu_type=PDUType.RSP), b'response_data')
         ]
         mock_parse.return_value = {'status': 0}
