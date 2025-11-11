@@ -110,6 +110,69 @@ def pack_nvme_write_command(command_id: int, nsid: int, start_lba: int, block_co
     return bytes(cmd)
 
 
+def pack_nvme_write_command_host_data(command_id: int, nsid: int, start_lba: int,
+                                      block_count: int, logical_block_size: int,
+                                      data_length: int) -> bytes:
+    """
+    Pack NVMe Write command with Transport SGL descriptor for R2T flow.
+
+    Used for large writes where data will be transferred via H2C_DATA PDUs
+    after receiving an R2T PDU.
+
+    Args:
+        command_id: Command identifier
+        nsid: Namespace identifier
+        start_lba: Starting Logical Block Address (0-based)
+        block_count: Number of blocks to write (1-based, from API)
+        logical_block_size: Logical block size in bytes
+        data_length: Total data length in bytes
+
+    Returns:
+        64-byte NVMe Write command with Transport SGL descriptor
+
+    Reference:
+    - NVM Base Spec Figure 118 (SGL Data Block descriptor structure)
+    - NVM Base Spec Figure 116 (SGL Descriptor Type values)
+    - NVM Base Spec Figure 117 (SGL Descriptor Sub Type values)
+    - NVMe-oF TCP Transport Spec Rev 1.2, Section 3.3.2, Figure 14
+    - Linux kernel: drivers/nvme/host/tcp.c:2589 (nvme_tcp_set_sg_host_data)
+
+    SGL Descriptor (16 bytes, NVMe command bytes 24-39):
+    Per Base Spec Figure 118:
+    - Bytes 0-7 (cmd offset 24-31): Address (unused for transport, set to 0)
+    - Bytes 8-11 (cmd offset 32-35): Length (data buffer size)
+    - Bytes 12-14 (cmd offset 36-38): Reserved
+    - Byte 15 (cmd offset 39): SGL Descriptor Type/Sub Type
+      * Bits 7:4 = Type: 5h (Transport SGL Data Block, per Figure 116)
+      * Bits 3:0 = Sub Type: Ah (NVMe Transport Specific, per Figure 117)
+      * Byte value = 0x5A
+    """
+    cmd = bytearray(NVME_COMMAND_SIZE)
+
+    # DW0: opcode=0x01, flags=SGL mode, command_id
+    struct.pack_into('<BBH', cmd, 0, NVMeOpcode.WRITE, NVME_CMD_FLAGS_SGL, command_id)
+
+    # DW1: namespace ID
+    struct.pack_into('<L', cmd, 4, nsid)
+
+    # DW6-9: SGL Entry 1 - Transport SGL Data Block Descriptor (16 bytes)
+    # Per Base Spec Figure 118 structure
+    struct.pack_into('<Q', cmd, 24, 0)              # Bytes 24-31: Address (unused, set to 0)
+    struct.pack_into('<L', cmd, 32, data_length)    # Bytes 32-35: Length (data buffer size)
+    struct.pack_into('<BBB', cmd, 36, 0, 0, 0)      # Bytes 36-38: Reserved
+    struct.pack_into('<B', cmd, 39, 0x5A)           # Byte 39: Type=5h (Transport SGL), Sub Type=Ah
+
+    # DW10-11: Starting LBA (64-bit)
+    struct.pack_into('<Q', cmd, 40, start_lba)
+
+    # DW12: Number of Logical Blocks (NLB) - 0-based value
+    # Convert from 1-based API to 0-based NVMe field
+    nlb = block_count - 1
+    struct.pack_into('<L', cmd, 48, nlb)
+
+    return bytes(cmd)
+
+
 def pack_nvme_flush_command(command_id: int, nsid: int) -> bytes:
     """
     Pack NVMe Flush Command for forcing data to non-volatile media.

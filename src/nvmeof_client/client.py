@@ -74,6 +74,7 @@ from .protocol import (
     pack_async_event_request_command,
     pack_nvme_read_command,
     pack_nvme_write_command,
+    pack_nvme_write_command_host_data,
     pack_nvme_flush_command,
     pack_nvme_write_zeroes_command,
     pack_nvme_compare_command,
@@ -144,6 +145,15 @@ class NVMeoFClient:
         self._queue_depth = 32      # Maximum outstanding commands
         self._controller_pda = 0    # Controller PDU Data Alignment
         self._digest_types = 0      # Digest types supported
+
+        # R2T (Ready to Transfer) flow parameters
+        # IOCCSZ: I/O Command Capsule Supported Size in 16-byte units (bytes 1792-1795 from Identify Controller)
+        # Reference: NVMe Base Specification Section 5.2.13.2.1, Figure 328
+        # Note: Value is in 16-byte units. Minimum is 4 (= 64 bytes). Multiply by 16 to get bytes.
+        self._ioccsz = 0
+        # MAXH2CDATA: Maximum H2C_DATA transfer length per PDU in bytes (from ICRESP)
+        # Reference: NVMe-oF TCP Transport Specification Rev 1.2, Section 3.6.2.3, Figure 27
+        self._maxh2cdata = 0
 
         # Connection type tracking
         self._connected_subsystem_nqn = None
@@ -1306,6 +1316,14 @@ class NVMeoFClient:
             return
 
         try:
+            # Get IOCCSZ from Identify Controller data for R2T flow calculations
+            # Reference: NVMe Base Specification Section 5.2.13.2.1, Figure 328, bytes 1792-1795
+            if self._ioccsz == 0:
+                controller_data = self.identify_controller()
+                self._ioccsz = controller_data.get('ioccsz', 0)
+                self._logger.debug("Retrieved IOCCSZ: %d (in 16-byte units = %d bytes)",
+                                   self._ioccsz, self._ioccsz * 16)
+
             self._logger.debug("Creating I/O queues for NVMe-oF TCP using separate connection...")
 
             # For NVMe-oF TCP, I/O queues require separate TCP connections
@@ -1521,6 +1539,14 @@ class NVMeoFClient:
         """
         Write data to specified namespace.
 
+        For small writes (<= inline_data_size), data is sent inline in the CMD PDU.
+        For large writes (> inline_data_size), the R2T (Ready to Transfer) protocol
+        is used:
+        1. Send CMD PDU with no data (SGL type = HOST_DATA)
+        2. Receive R2T PDU from target
+        3. Send H2C_DATA PDU(s) with data chunks
+        4. Receive CapsuleResp PDU with completion
+
         Args:
             nsid: Namespace identifier (1-based)
             lba: Starting logical block address (0-based)
@@ -1531,7 +1557,8 @@ class NVMeoFClient:
             CommandError: If write command fails
             ValueError: If parameters are invalid
 
-        Reference: NVM Command Set Specification Section 4.2 "Write command"
+        Reference: NVM Command Set Specification Section 4.4 "Write command";
+        NVMe-oF TCP Transport Spec Rev 1.2, Section 3.3.2.2
         """
         if not self._connected:
             raise NVMeoFConnectionError("Not connected to target")
@@ -1547,15 +1574,16 @@ class NVMeoFClient:
 
         # Calculate block count based on data size and actual logical block size
         if len(data) % logical_block_size != 0:
-            raise ValueError(f"Data size ({len(data)}) must be multiple of logical block size ({logical_block_size})")
+            raise ValueError("Data size (%d) must be multiple of logical block size (%d)" %
+                             (len(data), logical_block_size))
 
         block_count = len(data) // logical_block_size
 
         if block_count > NVME_MAX_IO_SIZE:
-            raise ValueError(f"Data too large: {block_count} blocks, max {NVME_MAX_IO_SIZE}")
+            raise ValueError("Data too large: %d blocks, max %d" % (block_count, NVME_MAX_IO_SIZE))
 
         if lba < 0:
-            raise ValueError(f"Invalid LBA: {lba}, must be >= 0")
+            raise ValueError("Invalid LBA: %d, must be >= 0" % lba)
 
         # Ensure I/O queues are set up before performing I/O operations
         self.setup_io_queues()
@@ -1563,10 +1591,42 @@ class NVMeoFClient:
         command_id = self._get_next_io_command_id()  # Use I/O queue command ID sequence
 
         try:
-            self._logger.debug(f"Writing {block_count} blocks to LBA {lba} on namespace {nsid}")
+            # Determine write flow based on data size
+            inline_data_size = self._get_inline_data_size()
 
-            # For writes, we need to send the command and data together
-            self._send_nvme_write_pdu(command_id, nsid, lba, data, logical_block_size)
+            if len(data) <= inline_data_size:
+                # Small write: use inline data flow
+                self._logger.debug(
+                    "Writing %d blocks to LBA %d on namespace %d (inline data)",
+                    block_count, lba, nsid)
+                self._send_nvme_write_pdu(command_id, nsid, lba, data, logical_block_size)
+            else:
+                # Large write: use R2T flow
+                self._logger.debug(
+                    "Writing %d blocks to LBA %d on namespace %d (R2T flow, data size %d > inline limit %d)",
+                    block_count, lba, nsid, len(data), inline_data_size)
+
+                # Send write command without data (Transport SGL)
+                nvme_command = pack_nvme_write_command_host_data(
+                    command_id, nsid, lba, block_count, logical_block_size, len(data))
+
+                # Create Command PDU header (no data)
+                total_pdu_length = NVMEOF_TCP_CMD_HEADER_LEN  # 72 bytes, no data
+
+                pdu_header = pack_pdu_header(
+                    pdu_type=PDUType.CMD,
+                    flags=0,
+                    hlen=NVMEOF_TCP_CMD_HEADER_LEN,
+                    pdo=0,  # No data offset (no data in this PDU)
+                    plen=total_pdu_length
+                )
+
+                # Send PDU: header + NVMe command (no data)
+                pdu_data = pdu_header + nvme_command
+                self._io_socket.sendall(pdu_data)
+
+                # Handle R2T PDU and send data via H2C_DATA PDUs
+                self._handle_r2t_and_send_data(command_id, data, self._io_socket)
 
             # Receive completion response from I/O socket
             response_header, response_data = self._receive_pdu_on_socket(self._io_socket)
@@ -1575,15 +1635,16 @@ class NVMeoFClient:
                 response = ResponseParser.parse_response(response_data, command_id)
                 if response['status'] != 0:
                     raise CommandError(
-                        f"Write command failed with status {response['status']:02x}",
+                        "Write command failed with status %02x" % response['status'],
                         response['status'], command_id)
             else:
-                raise ProtocolError(f"Expected RSP PDU for write response, got type {response_header.pdu_type}")
+                raise ProtocolError("Expected RSP PDU for write response, got type %d" %
+                                    response_header.pdu_type)
 
             self._logger.debug("Write operation completed successfully")
 
         except Exception as e:
-            self._logger.error(f"Write operation failed: {e}")
+            self._logger.error("Write operation failed: %s", e)
             raise
 
     def write_zeroes(self, nsid: int, lba: int, block_count: int) -> None:
@@ -2895,6 +2956,180 @@ class NVMeoFClient:
             data += chunk
         return data
 
+    def _get_inline_data_size(self) -> int:
+        """
+        Calculate maximum inline data size for I/O commands.
+
+        For I/O commands, inline data size is the I/O Command Capsule Supported Size
+        (IOCCSZ) minus the NVMe command size (64 bytes).
+
+        Returns:
+            Maximum bytes that can be sent inline in CMD PDU
+
+        Raises:
+            ProtocolError: If IOCCSZ not negotiated
+
+        Reference: NVMe-oF TCP Transport Specification Rev 1.2,
+        Section 3.3.2.2 "Host to Controller Command Data Buffer Transfers";
+        NVMe Base Specification Section 5.2.13.2.1, Figure 328
+        """
+        if not self._ioccsz:
+            raise ProtocolError("I/O Command Capsule Supported Size not negotiated")
+        # IOCCSZ is in 16-byte units per Figure 328
+        ioccsz_bytes = self._ioccsz * 16
+        return ioccsz_bytes - NVME_COMMAND_SIZE  # 64 bytes
+
+    def _send_h2c_data_pdu(self, command_id: int, ttag: int, data_offset: int,
+                           data: bytes, is_last: bool, socket: socket.socket) -> None:
+        """
+        Send Host to Controller Data Transfer PDU (H2CData).
+
+        H2CData PDUs transfer data from host to controller in response to an
+        R2T PDU. Multiple H2CData PDUs may be sent to complete a single
+        data transfer.
+
+        Args:
+            command_id: Command identifier from original CMD PDU
+            ttag: Transfer tag from R2T PDU (not command_id!)
+            data_offset: Byte offset within command data buffer
+            data: Data chunk to send (up to maxh2cdata bytes)
+            is_last: True if this is the last H2C_DATA PDU for this transfer
+            socket: Socket to send on (typically I/O socket)
+
+        Raises:
+            ValueError: If data chunk exceeds maxh2cdata
+
+        Reference: NVMe-oF TCP Transport Specification Rev 1.2,
+        Section 3.6.2.8, Figure 32 (H2CData PDU)
+
+        PDU Structure:
+        Bytes 00-07: Common Header (CH)
+          - PDU Type: 06h (H2C_DATA)
+          - Flags: LAST_PDU (bit 2) if is_last
+          - HLEN: 24 (0x18) - Fixed header length
+          - PDO: Data offset (24 + header digest if enabled)
+          - PLEN: Total PDU length
+        Bytes 08-09: Command ID (CCCID)
+        Bytes 10-11: Transfer Tag (TTAG) - from R2T PDU
+        Bytes 12-15: Data Offset (DATAO)
+        Bytes 16-19: Data Length (DATAL)
+        Bytes 20-23: Reserved
+        Bytes 24+: DATA (if any)
+        """
+        if len(data) > self._maxh2cdata:
+            raise ValueError(
+                "Data chunk size %d exceeds maxh2cdata %d" % (len(data), self._maxh2cdata))
+
+        # Build H2C_DATA PDU
+        pdu_hlen = 24  # Fixed H2CData header length
+        pdu_pdo = pdu_hlen  # No digest support yet
+        pdu_plen = pdu_hlen + len(data)
+
+        # Common header (8 bytes)
+        flags = PDUFlags.H2C_DATA_LAST if is_last else 0
+        pdu_header = pack_pdu_header(
+            pdu_type=PDUType.H2C_DATA,
+            flags=flags,
+            hlen=pdu_hlen,
+            pdo=pdu_pdo,
+            plen=pdu_plen
+        )
+
+        # Protocol Specific Header (16 bytes)
+        psh = struct.pack(
+            '<HHII4x',  # Little-endian: u16, u16, u32, u32, 4 reserved bytes
+            command_id,   # CCCID (bytes 8-9)
+            ttag,         # TTAG (bytes 10-11) - MUST use ttag from R2T, not command_id
+            data_offset,  # DATAO (bytes 12-15)
+            len(data)     # DATAL (bytes 16-19)
+            # 4x = 4 reserved bytes (20-23)
+        )
+
+        # Send complete PDU
+        pdu_data = pdu_header + psh + data
+        socket.sendall(pdu_data)
+
+        self._logger.debug(
+            "Sent H2C_DATA: cmd_id=%d, ttag=%d, offset=%d, len=%d, last=%s",
+            command_id, ttag, data_offset, len(data), is_last)
+
+    def _handle_r2t_and_send_data(self, command_id: int, data: bytes,
+                                  socket: socket.socket) -> None:
+        """
+        Handle R2T (Ready to Transfer) PDU and send data via H2C_DATA PDUs.
+
+        This implements the large write protocol flow where the target sends
+        an R2T PDU to request data transfer.
+
+        Args:
+            command_id: Command identifier to match with R2T
+            data: Complete data buffer to send
+            socket: Socket to receive R2T and send H2C_DATA (typically I/O socket)
+
+        Raises:
+            ProtocolError: If R2T validation fails
+            NVMeoFTimeoutError: If R2T not received in time
+
+        Reference: NVMe-oF TCP Transport Specification Rev 1.2,
+        Section 3.3.2.2, Figure 34 (R2T PDU)
+        """
+        # 1. Receive R2T PDU
+        r2t_header, r2t_data = self._receive_pdu_on_socket(socket)
+
+        if r2t_header.pdu_type != PDUType.R2T:
+            raise ProtocolError("Expected R2T PDU, got type %d" % r2t_header.pdu_type)
+
+        # 2. Parse R2T PDU (24 bytes total)
+        # Reference: Figure 34, Section 3.6.2.10
+        # Bytes 00-07: Common Header (CH)
+        # Bytes 08-09: Command ID (CCCID)
+        # Bytes 10-11: Transfer Tag (TTAG)
+        # Bytes 12-15: R2T Offset (R2TO)
+        # Bytes 16-19: R2T Length (R2TL)
+        # Bytes 20-23: Reserved
+
+        if len(r2t_data) < 16:  # Need PSH: command_id, ttag, offset, length
+            raise ProtocolError("R2T PDU too short: %d bytes" % len(r2t_data))
+
+        r2t_command_id = struct.unpack('<H', r2t_data[0:2])[0]
+        ttag = struct.unpack('<H', r2t_data[2:4])[0]
+        r2t_offset = struct.unpack('<I', r2t_data[4:8])[0]
+        r2t_length = struct.unpack('<I', r2t_data[8:12])[0]
+
+        # 3. Validate R2T parameters (per kernel nvme_tcp_handle_r2t logic)
+        if r2t_command_id != command_id:
+            raise ProtocolError(
+                "R2T command_id mismatch: expected %d, got %d" % (command_id, r2t_command_id))
+
+        if r2t_length == 0:
+            raise ProtocolError("R2T length is zero")
+
+        if r2t_offset + r2t_length > len(data):
+            raise ProtocolError(
+                "R2T range [%d:%d] exceeds data length %d" %
+                (r2t_offset, r2t_offset + r2t_length, len(data)))
+
+        # 4. Send data in H2C_DATA PDU(s)
+        data_sent = 0
+        while data_sent < r2t_length:
+            chunk_size = min(r2t_length - data_sent, self._maxh2cdata)
+            chunk_offset = r2t_offset + data_sent
+            chunk_data = data[chunk_offset:chunk_offset + chunk_size]
+            is_last = (data_sent + chunk_size >= r2t_length)
+
+            self._send_h2c_data_pdu(
+                command_id=command_id,
+                ttag=ttag,
+                data_offset=chunk_offset,
+                data=chunk_data,
+                is_last=is_last,
+                socket=socket
+            )
+
+            data_sent += chunk_size
+
+        self._logger.debug("Sent %d bytes via H2C_DATA for command %d", data_sent, command_id)
+
     def _process_icresp(self, data: bytes) -> None:
         """
         Process Initialize Connection Response.
@@ -2902,19 +3137,19 @@ class NVMeoFClient:
         Args:
             data: ICRESP payload data (128 bytes total minus 8 byte header = 120 bytes)
 
-        Reference: NVMe-oF TCP Transport Specification Section 7.4.10.3
+        Reference: NVMe-oF TCP Transport Specification Rev 1.2, Section 3.6.2.3, Figure 27
         """
         if len(data) < 120:
             raise ProtocolError(f"Invalid ICRESP data length: {len(data)}, expected 120")
 
-        # Parse ICRESP fields based on Linux kernel struct nvme_tcp_icresp_pdu
-        # pfv (2 bytes): Protocol Format Version (little-endian)
-        # cpda (1 byte): Controller PDU Data Alignment
-        # digest (1 byte): Digest types
-        # maxdata (4 bytes): Maximum data transfer size
-        # rsvd2 (remaining bytes): Reserved
+        # Parse ICRESP fields per Figure 27 (offsets relative to data, not PDU):
+        # Bytes 0-1: PFV (PDU Format Version, little-endian)
+        # Byte 2: CPDA (Controller PDU Data Alignment)
+        # Byte 3: DGST (Digest types)
+        # Bytes 4-7: MAXH2CDATA (Maximum Host to Controller Data length)
+        # Bytes 8-119: Reserved
 
-        pfv, cpda, digest, maxdata = struct.unpack('<HBBI', data[:8])
+        pfv, cpda, digest, maxh2cdata = struct.unpack('<HBBI', data[:8])
 
         # Check protocol version compatibility - Linux kernel expects version 1.0
         if pfv != NVME_TCP_PFV_1_0:
@@ -2923,10 +3158,11 @@ class NVMeoFClient:
         # Store connection parameters
         self._controller_pda = cpda
         self._digest_types = digest
-        self._max_data_size = maxdata if maxdata > 0 else self._max_data_size
+        self._max_data_size = maxh2cdata if maxh2cdata > 0 else self._max_data_size
+        self._maxh2cdata = maxh2cdata
 
         self._logger.debug(
-            f"ICRESP: pfv=0x{pfv:04x}, cpda={cpda}, digest={digest}, maxdata={maxdata}")
+            f"ICRESP: pfv=0x{pfv:04x}, cpda={cpda}, digest={digest}, maxh2cdata={maxh2cdata}")
 
     def _send_fabric_connect(self, subsys_nqn: str = None) -> None:
         """
