@@ -115,7 +115,8 @@ class NVMeoFClient:
 
     def __init__(self, host: str, subsystem_nqn: Optional[str] = None,
                  port: int = NVMEOF_TCP_PORT,
-                 timeout: Optional[float] = None, host_nqn: Optional[str] = None):
+                 timeout: Optional[float] = None, host_nqn: Optional[str] = None,
+                 kato: int = 0):
         """
         Initialize NVMe-oF TCP client.
 
@@ -125,6 +126,7 @@ class NVMeoFClient:
             port: Target port (default: 4420 per NVMe-oF specification)
             timeout: Default timeout for operations in seconds
             host_nqn: Host NQN to use (if None, one will be generated automatically)
+            kato: Keep Alive Timeout in milliseconds (0 = disabled, default)
 
         Reference: NVMe-oF TCP Transport Specification Section 2.1
         """
@@ -133,6 +135,7 @@ class NVMeoFClient:
         self.timeout = timeout
         self._subsystem_nqn = subsystem_nqn  # Subsystem NQN to connect to
         self._host_nqn = host_nqn  # Store user-provided Host NQN or None
+        self._kato = kato  # Keep Alive Timeout in milliseconds
         self._socket: Optional[socket.socket] = None
         self._io_socket: Optional[socket.socket] = None  # Separate socket for I/O queue
         self._connected = False
@@ -1359,7 +1362,7 @@ class NVMeoFClient:
 
             # Send Fabric Connect for I/O queue
             command_id = self._get_next_io_command_id()  # Use I/O queue command ID sequence
-            connect_cmd = pack_fabric_connect_command(command_id, queue_id=queue_id, queue_size=queue_size)
+            connect_cmd = pack_fabric_connect_command(command_id, queue_id=queue_id, queue_size=queue_size, kato=0)
 
             connect_data = pack_fabric_connect_data(
                 host_nqn=self._host_nqn,
@@ -2818,6 +2821,11 @@ class NVMeoFClient:
         """Get the NQN of the currently connected subsystem."""
         return self._connected_subsystem_nqn if self._connected else None
 
+    @property
+    def kato(self) -> int:
+        """Get the Keep Alive Timeout value in milliseconds (0 = disabled)."""
+        return self._kato
+
     def _initialize_connection(self, subsystem_nqn: str = None) -> None:
         """
         Perform NVMe-oF specific connection initialization.
@@ -3193,7 +3201,7 @@ class NVMeoFClient:
         # Build Fabric Connect command for admin queue
         # Admin queue uses smaller size, I/O queues use larger size
         queue_size = 31  # Admin queue size (32 entries)
-        connect_cmd = pack_fabric_connect_command(command_id, queue_id=0, queue_size=queue_size)
+        connect_cmd = pack_fabric_connect_command(command_id, queue_id=0, queue_size=queue_size, kato=self._kato)
 
         # Build connect data with NQNs
         connect_data = pack_fabric_connect_data(host_nqn, subsys_nqn)

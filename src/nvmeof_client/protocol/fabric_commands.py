@@ -9,20 +9,21 @@ from .constants import NVME_COMMAND_SIZE, NVME_CONNECT_DATA_SIZE, NVME_CMD_FLAGS
 from .types import NVMeOpcode, FabricCommandType
 
 
-def pack_fabric_connect_command(command_id: int, queue_id: int = 0, queue_size: int = 31) -> bytes:
+def pack_fabric_connect_command(command_id: int, queue_id: int = 0, queue_size: int = 31, kato: int = 0) -> bytes:
     """
-    Pack Fabric Connect Command based on NVMe-oF specification.
+    Pack Fabric Connect Command based on NVMe specification.
 
     Args:
         command_id: Command identifier
         queue_id: Queue ID (0 for admin, 1+ for I/O)
         queue_size: Queue size (entries - 1, so 127 = 128 entries)
+        kato: Keep Alive Timeout in milliseconds (0 = disabled, only for Admin Queue)
 
     Returns:
         64-byte Fabric Connect command
 
-    Reference: NVMe over Fabrics Specification Rev 1.1, Section 3.3
-    "Connect Command" and Figure 18
+    Reference: NVM Express Base Specification, Revision 2.3, Figure 579
+    "Connect Command - Submission Queue Entry"
     """
     cmd = bytearray(NVME_COMMAND_SIZE)
 
@@ -36,13 +37,18 @@ def pack_fabric_connect_command(command_id: int, queue_id: int = 0, queue_size: 
     # SGL descriptor for connect data transfer
     struct.pack_into('<BBBBBBBB', cmd, 32, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01)
 
-    # DW10-11: Connect-specific fields
     # DW10: RECFMT (bits 15:0) + QID (bits 31:16)
-    # DW11: SQSIZE (bits 15:0) + other fields
     dw10 = 0 | (queue_id << 16)  # RECFMT=0, QID in upper 16 bits
-    dw11 = queue_size  # SQSIZE in lower 16 bits
     struct.pack_into('<L', cmd, 40, dw10)
+
+    # DW11: SQSIZE (bits 15:0) + CATTR (bits 23:16) + Reserved (bits 31:24)
+    dw11 = queue_size  # SQSIZE in lower 16 bits, CATTR=0, Reserved=0
     struct.pack_into('<L', cmd, 44, dw11)
+
+    # DW12: KATO (full 32-bit value in milliseconds)
+    # For Admin Queue: specifies Keep Alive Timeout (0 = disabled)
+    # For I/O Queue: reserved, should be 0
+    struct.pack_into('<L', cmd, 48, kato)
 
     return bytes(cmd)
 
