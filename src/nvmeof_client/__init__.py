@@ -29,7 +29,13 @@ from .models import (
     ControllerStatus,
     ANAState,
     ANAGroupDescriptor,
-    ANALogPage
+    ANALogPage,
+    AsyncEvent,
+    AsyncEventType,
+    ReservationType,
+    ReservationAction,
+    ReservationStatus,
+    ReservationInfo
 )
 
 __version__ = "1.0.0"
@@ -51,5 +57,11 @@ __all__ = [
     "ControllerStatus",
     "ANAState",
     "ANAGroupDescriptor",
-    "ANALogPage"
+    "ANALogPage",
+    "AsyncEvent",
+    "AsyncEventType",
+    "ReservationType",
+    "ReservationAction",
+    "ReservationStatus",
+    "ReservationInfo"
 ]

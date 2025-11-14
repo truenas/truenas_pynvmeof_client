@@ -113,6 +113,21 @@ for entry in entries:
     print(f"  Type: {entry.subsystem_type}")
 ```
 
+### Keep-Alive for HA Scenarios
+
+```python
+# Enable 30-second keep-alive for high availability scenarios
+client = NVMeoFClient(
+    "192.168.1.100",
+    "nqn.2024-01.com.example:subsystem1",
+    kato=30000  # 30 seconds in milliseconds
+)
+client.connect()
+
+# Connection will be closed by controller if no commands sent for 30 seconds
+# Useful for detecting failed connections in multipath/HA configurations
+```
+
 ### ANA Multipath
 
 ```python
@@ -123,17 +138,48 @@ client.connect()
 # Get ANA state
 ana_log = client.get_ana_log_page()
 for group in ana_log.groups:
-    print(f"ANA Group {group.ana_group_id}: {group.ana_state}")
+    print(f"ANA Group {group.ana_group_id}: {group.ana_state.name}")
     print(f"  Namespaces: {group.namespace_ids}")
+```
 
-# Monitor for ANA changes via Async Events
-def handle_aen(event):
-    if event.event_type == "ANA_CHANGE":
-        print("ANA state changed!")
-        # Re-read ANA log page
-        ana_log = client.get_ana_log_page()
+### Asynchronous Event Notifications
 
-client.enable_async_events(callback=handle_aen)
+Monitor for controller events (ANA changes, namespace changes, etc.) using a polling-based API:
+
+```python
+from nvmeof_client import NVMeoFClient
+
+client = NVMeoFClient("192.168.1.100", "nqn.2024-01.com.example:subsystem1")
+client.connect()
+
+# Step 1: Enable async events (configures which event types to receive)
+client.enable_async_events()  # Uses controller's supported events by default
+
+# Step 2: Submit async event requests (pre-post requests to receive notifications)
+client.request_async_events(count=4)  # Submit 4 outstanding requests
+
+# Step 3: Poll for events in your main loop
+import time
+
+while True:
+    # Poll for any completed events
+    events = client.poll_async_events(timeout=0.1)
+
+    for event in events:
+        print(f"Event received: {event.description}")
+
+        # Check for ANA state changes
+        if event.is_notice and event.log_page_id == 0x0C:  # ANA log page
+            print("ANA state changed!")
+            ana_log = client.get_ana_log_page()
+            for group in ana_log.groups:
+                print(f"  Group {group.ana_group_id}: {group.ana_state.name}")
+
+        # Resubmit request to receive future events
+        client.request_async_events(count=1)
+
+    # Do other work...
+    time.sleep(0.1)
 ```
 
 ### I/O Operations
@@ -151,6 +197,53 @@ print(read_data[:12])  # b"Hello, NVMe!"
 client.flush_namespace(nsid=1)
 ```
 
+### Persistent Reservations
+
+```python
+from nvmeof_client import NVMeoFClient, ReservationType, ReservationAction
+
+client = NVMeoFClient("192.168.1.100", "nqn.2024-01.com.example:subsystem1")
+client.connect()
+
+# Step 1: Register a reservation key
+reservation_key = 0x123456789ABCDEF0
+client.register_reservation_key(
+    nsid=1,
+    current_key=0,  # 0 for initial registration
+    new_key=reservation_key
+)
+
+# Step 2: Acquire exclusive write access
+client.acquire_reservation(
+    nsid=1,
+    reservation_key=reservation_key,
+    reservation_type=ReservationType.WRITE_EXCLUSIVE,
+    action=ReservationAction.ACQUIRE
+)
+
+# Step 3: Perform I/O with exclusive access
+client.write_data(nsid=1, lba=0, data=b"Protected data".ljust(512, b'\x00'))
+
+# Step 4: Check reservation status
+status = client.report_reservations(nsid=1)
+print(f"Reservation type: {status.reservation_type}")
+print(f"Number of registered hosts: {len(status.registered_controllers)}")
+
+# Step 5: Release reservation
+client.release_reservation(
+    nsid=1,
+    reservation_key=reservation_key,
+    reservation_type=ReservationType.WRITE_EXCLUSIVE
+)
+
+# Step 6: Unregister key
+client.register_reservation_key(
+    nsid=1,
+    current_key=reservation_key,
+    new_key=0  # 0 to unregister
+)
+```
+
 ## API Reference
 
 ### Main Client Class
@@ -162,13 +255,16 @@ The main client class for NVMe-oF operations.
 **Constructor:**
 
 ```python
-NVMeoFClient(host, subsystem_nqn=None, port=4420, timeout=None, host_nqn=None)
+NVMeoFClient(host, subsystem_nqn=None, port=4420, timeout=None, host_nqn=None, kato=0)
 ```
 - `host` - Target hostname or IP address
 - `subsystem_nqn` - Subsystem NQN to connect to (if None, connects to discovery service)
 - `port` - Target port (default: 4420)
 - `timeout` - Default timeout for operations in seconds
 - `host_nqn` - Host NQN (auto-generated if None)
+- `kato` - Keep-Alive Timeout in milliseconds (0 = disabled, default). When enabled, the controller
+  will close the connection if no commands are received within the KATO period. Useful for HA scenarios
+  to detect connection failures.
 
 **Methods:**
 
@@ -195,19 +291,45 @@ Log Pages and Features:
 - `get_log_page(log_id, nsid=0xFFFFFFFF)` - Get log page
 - `get_ana_log_page()` - Get ANA log page
 - `get_discovery_log()` - Get discovery log
-- `enable_async_events(callback)` - Enable async event notifications
 - `get_features(feature_id, nsid=0)` - Get feature
 - `set_features(feature_id, value, nsid=0)` - Set feature
 
+Asynchronous Events:
+- `enable_async_events(event_mask=None)` - Enable async event notifications
+- `request_async_events(count=1)` - Submit async event request commands
+- `poll_async_events(timeout=0.1)` - Poll for completed events (returns List[AsyncEvent])
+
+Persistent Reservations:
+- `register_reservation_key(nsid, current_key, new_key)` - Register/unregister reservation key
+- `acquire_reservation(nsid, reservation_key, reservation_type, action)` - Acquire reservation
+- `release_reservation(nsid, reservation_key, reservation_type)` - Release reservation
+- `report_reservations(nsid)` - Get reservation status (returns ReservationStatus)
+
 ### Models
 
-All data structures are available in `nvmeof_client.models`:
+All data structures are available in the public API via `from nvmeof_client import ...`:
 
+**Controller and Namespace Information:**
 - `ControllerInfo` - Controller identification data
 - `NamespaceInfo` - Namespace identification data
-- `ANALogPage`, `ANAGroupDescriptor`, `ANAState` - ANA structures
-- `DiscoveryEntry` - Discovery log entry
-- `AsyncEvent`, `AsyncEventType` - Async event structures
+
+**ANA (Asymmetric Namespace Access):**
+- `ANALogPage` - ANA log page containing all group descriptors
+- `ANAGroupDescriptor` - Single ANA group with state and namespace list
+- `ANAState` - Enum of ANA states (OPTIMIZED, NON_OPTIMIZED, INACCESSIBLE, etc.)
+
+**Discovery:**
+- `DiscoveryEntry` - Discovery log entry with subsystem information
+
+**Asynchronous Events:**
+- `AsyncEvent` - Async event notification from controller
+- `AsyncEventType` - Enum of event types (ERROR, SMART_HEALTH, NOTICE, etc.)
+
+**Persistent Reservations:**
+- `ReservationType` - Enum of reservation types (WRITE_EXCLUSIVE, EXCLUSIVE_ACCESS, etc.)
+- `ReservationAction` - Enum of reservation actions (REGISTER, ACQUIRE, RELEASE, etc.)
+- `ReservationStatus` - Reservation status from report command
+- `ReservationInfo` - Result of reservation operations
 
 ### Exceptions
 
@@ -308,26 +430,34 @@ pytest -s --log-cli-level=DEBUG
 ## Architecture
 
 ```
-nvmeof_client/
-├── __init__.py           # Public API exports
-├── client.py             # Main NVMeoFClient class
-├── models.py             # Data structures
-├── exceptions.py         # Exception classes
-├── parsers/              # Protocol parsers
+src/nvmeof_client/
+├── __init__.py                # Public API exports
+├── client.py                  # Main NVMeoFClient class
+├── models.py                  # Data structures
+├── exceptions.py              # Exception classes
+├── parsers/                   # Protocol response parsers
 │   ├── __init__.py
-│   ├── base.py
-│   ├── response.py
-│   ├── controller.py
-│   ├── namespace.py
-│   ├── discovery.py
-│   ├── ana.py
-│   └── async_event.py
-└── protocol/             # Protocol structures
+│   ├── base.py               # Base parser class
+│   ├── response.py           # Response PDU parsing
+│   ├── controller.py         # Controller identification
+│   ├── namespace.py          # Namespace identification
+│   ├── discovery.py          # Discovery log parsing
+│   ├── ana.py                # ANA log page parsing
+│   ├── async_event.py        # Async event parsing
+│   ├── reservation.py        # Reservation report parsing
+│   ├── changed_namespace_list.py  # Namespace change list
+│   ├── capabilities.py       # Controller capabilities
+│   └── protocol.py           # Protocol-specific parsing
+└── protocol/                  # Protocol structures and commands
     ├── __init__.py
-    ├── pdu.py
-    ├── commands.py
-    ├── io_commands.py
-    └── utils.py
+    ├── constants.py          # Protocol constants
+    ├── types.py              # Type definitions and enums
+    ├── pdu.py                # PDU header operations
+    ├── admin_commands.py     # Admin command builders
+    ├── fabric_commands.py    # Fabric command builders
+    ├── io_commands.py        # I/O command builders
+    ├── status_codes.py       # Status code decoding
+    └── utils.py              # Utility functions
 ```
 
 ## Compatibility
