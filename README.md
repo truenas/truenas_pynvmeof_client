@@ -15,7 +15,7 @@ A pure Python implementation of an NVMe over Fabrics (NVMe-oF) TCP client librar
 
 ## Requirements
 
-- Python 3.8 or higher
+- Python 3.10 or higher
 - Linux operating system
 - Network access to NVMe-oF TCP targets
 
