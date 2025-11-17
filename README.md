@@ -105,11 +105,11 @@ with NVMeoFClient("192.168.1.100", "nqn.2024-01.com.example:subsystem1") as clie
 client = NVMeoFClient("192.168.1.100", "nqn.2014-08.org.nvmexpress.discovery", port=8009)
 client.connect()
 
-# Get discovery log
-entries = client.get_discovery_log()
+# Get discovery entries
+entries = client.get_discovery_entries()
 for entry in entries:
     print(f"Subsystem: {entry.subsystem_nqn}")
-    print(f"  Address: {entry.traddr}:{entry.trsvcid}")
+    print(f"  Address: {entry.transport_address}:{entry.transport_service_id}")
     print(f"  Type: {entry.subsystem_type}")
 ```
 
@@ -207,14 +207,14 @@ client.connect()
 
 # Step 1: Register a reservation key
 reservation_key = 0x123456789ABCDEF0
-client.register_reservation_key(
+client.reservation_register(
     nsid=1,
     current_key=0,  # 0 for initial registration
     new_key=reservation_key
 )
 
 # Step 2: Acquire exclusive write access
-client.acquire_reservation(
+client.reservation_acquire(
     nsid=1,
     reservation_key=reservation_key,
     reservation_type=ReservationType.WRITE_EXCLUSIVE,
@@ -225,19 +225,19 @@ client.acquire_reservation(
 client.write_data(nsid=1, lba=0, data=b"Protected data".ljust(512, b'\x00'))
 
 # Step 4: Check reservation status
-status = client.report_reservations(nsid=1)
+status = client.reservation_report(nsid=1)
 print(f"Reservation type: {status.reservation_type}")
 print(f"Number of registered hosts: {len(status.registered_controllers)}")
 
 # Step 5: Release reservation
-client.release_reservation(
+client.reservation_release(
     nsid=1,
     reservation_key=reservation_key,
     reservation_type=ReservationType.WRITE_EXCLUSIVE
 )
 
 # Step 6: Unregister key
-client.register_reservation_key(
+client.reservation_register(
     nsid=1,
     current_key=reservation_key,
     new_key=0  # 0 to unregister
@@ -281,6 +281,10 @@ Low-Level Identify Commands (return raw dicts):
 - `identify_controller()` - Get controller information (returns dict)
 - `identify_namespace(nsid)` - Get namespace information (returns dict)
 
+Discovery:
+- `get_discovery_entries(max_entries)` - Get discovery entries as DiscoveryEntry objects
+- `discover_subsystems(max_entries)` - Discover subsystems (returns list of dicts)
+
 I/O Operations:
 - `read_data(nsid, lba, block_count)` - Read data from namespace
 - `write_data(nsid, lba, data)` - Write data to namespace
@@ -290,7 +294,6 @@ I/O Operations:
 Log Pages and Features:
 - `get_log_page(log_id, nsid=0xFFFFFFFF)` - Get log page
 - `get_ana_log_page()` - Get ANA log page
-- `get_discovery_log()` - Get discovery log
 - `get_features(feature_id, nsid=0)` - Get feature
 - `set_features(feature_id, value, nsid=0)` - Set feature
 
@@ -300,10 +303,10 @@ Asynchronous Events:
 - `poll_async_events(timeout=0.1)` - Poll for completed events (returns List[AsyncEvent])
 
 Persistent Reservations:
-- `register_reservation_key(nsid, current_key, new_key)` - Register/unregister reservation key
-- `acquire_reservation(nsid, reservation_key, reservation_type, action)` - Acquire reservation
-- `release_reservation(nsid, reservation_key, reservation_type)` - Release reservation
-- `report_reservations(nsid)` - Get reservation status (returns ReservationStatus)
+- `reservation_register(nsid, current_key, new_key)` - Register/unregister reservation key
+- `reservation_acquire(nsid, reservation_key, reservation_type, action)` - Acquire reservation
+- `reservation_release(nsid, reservation_key, reservation_type)` - Release reservation
+- `reservation_report(nsid)` - Get reservation status (returns ReservationStatus)
 
 ### Models
 
@@ -471,8 +474,8 @@ Tested with:
 ### Transport Protocols
 
 - ✅ TCP - Fully supported
-- ⚠️  RDMA - Planned (not yet implemented)
-- ⚠️  FC - Planned (not yet implemented)
+- ⚠️  RDMA - Not Planned
+- ⚠️  FC - Not Planned
 
 ### NVMe Features
 
