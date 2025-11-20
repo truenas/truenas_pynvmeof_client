@@ -6,6 +6,7 @@ no false positives from historical data. Each test follows a strict
 reset-write-verify-cleanup cycle.
 """
 
+import random
 import pytest
 from nvmeof_client.client import NVMeoFClient
 
@@ -98,7 +99,6 @@ class TestEnhancedIOOperations:
                 nvme_client.write_data(test_namespace_id, lba, test_data)
 
             # Phase 3: Verify all written data in random order
-            import random
             verification_order = valid_lbas.copy()
             random.shuffle(verification_order)
 

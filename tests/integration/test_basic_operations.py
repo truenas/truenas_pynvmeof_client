@@ -6,8 +6,15 @@ against a live NVMe-oF target.
 """
 
 import pytest
+from nvmeof_client.client import NVMeoFClient
 from nvmeof_client.exceptions import NVMeoFConnectionError
-from nvmeof_client.models import DiscoveryEntry, ControllerInfo, NamespaceInfo
+from nvmeof_client.models import (
+    AddressFamily,
+    ControllerInfo,
+    DiscoveryEntry,
+    NamespaceInfo,
+    TransportType,
+)
 
 
 @pytest.mark.integration
@@ -16,7 +23,6 @@ class TestBasicConnectivity:
 
     def test_connect_disconnect(self, target_config):
         """Test basic connection and disconnection."""
-        from nvmeof_client.client import NVMeoFClient
 
         client = NVMeoFClient(target_config['host'], port=target_config['port'])
 
@@ -40,7 +46,6 @@ class TestBasicConnectivity:
 
     def test_disconnect_when_not_connected(self, target_config):
         """Test disconnecting when not connected."""
-        from nvmeof_client.client import NVMeoFClient
 
         client = NVMeoFClient(target_config['host'], port=target_config['port'])
 
@@ -90,7 +95,6 @@ class TestDiscoveryOperations:
             assert entry.transport_service_id
 
             # Test enum types
-            from nvmeof_client.models import TransportType, AddressFamily
             assert isinstance(entry.transport_type, TransportType)
             assert isinstance(entry.address_family, AddressFamily)
 
@@ -462,7 +466,6 @@ class TestErrorHandling:
 
     def test_connection_timeout(self, target_config):
         """Test connection timeout behavior."""
-        from nvmeof_client.client import NVMeoFClient
 
         # Use very short timeout
         client = NVMeoFClient(target_config['host'], port=target_config['port'], timeout=0.001)

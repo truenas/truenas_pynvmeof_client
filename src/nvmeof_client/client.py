@@ -9,84 +9,98 @@ References:
 - NVMe Base Specification Revision 2.2
 """
 
+import select
 import socket
 import struct
 import time
 import logging
+import uuid
 from typing import Any
 
 from .exceptions import (
+    CommandError,
     NVMeoFConnectionError,
     NVMeoFTimeoutError,
-    CommandError,
-    ProtocolError
+    ProtocolError,
 )
 from .models import (
-    ControllerInfo, NamespaceInfo,
-    ReservationType, ReservationAction, ReservationStatus, ReservationInfo,
-    ANAState, ANALogPage, AsyncEvent
+    AddressFamily,
+    ANALogPage,
+    ANAState,
+    AsyncEvent,
+    ControllerInfo,
+    DiscoveryEntry,
+    NamespaceInfo,
+    ReservationAction,
+    ReservationInfo,
+    ReservationStatus,
+    ReservationType,
+    TransportType,
 )
 from .parsers import (
-    ControllerDataParser, NamespaceDataParser,
-    ReservationDataParser, ResponseParser, ANALogPageParser, AsyncEventParser
+    ANALogPageParser,
+    AsyncEventParser,
+    ChangedNamespaceListParser,
+    ControllerDataParser,
+    NamespaceDataParser,
+    ReservationDataParser,
+    ResponseParser,
 )
 from .protocol import (
     # Types and Enums
-    PDUType,
-    PDUFlags,
-    NVMeProperty,
-    LogPageIdentifier,
-    IdentifyDataStructure,
-    ControllerStatus,
     ControllerConfiguration,
-    PDUHeader,
+    ControllerStatus,
     FeatureIdentifier,
-
+    IdentifyDataStructure,
+    LogPageIdentifier,
+    NVMeProperty,
+    PDUFlags,
+    PDUHeader,
+    PDUType,
     # Constants
-    NVMEOF_TCP_PORT,
-    NVME_TCP_PFV_1_0,
+    NVME_COMMAND_ID_MASK,
+    NVME_COMMAND_SIZE,
+    NVME_DEFAULT_MAX_ENTRIES,
     NVME_DISCOVERY_LOG_SIZE,
-    NVMEOF_TCP_PDU_BASIC_HEADER_LEN,
-    NVMEOF_TCP_ICREQ_HEADER_LEN,
-    NVMEOF_TCP_ICREQ_TOTAL_LEN,
+    NVME_IOCQES_16_BYTES,
+    NVME_IOSQES_64_BYTES,
+    NVME_MAX_IO_SIZE,
+    NVME_SECTOR_SIZE,
+    NVME_TCP_PFV_1_0,
     NVMEOF_TCP_CMD_HEADER_LEN,
     NVMEOF_TCP_CMD_PDO,
-    NVME_DEFAULT_MAX_ENTRIES,
-    NVME_MAX_IO_SIZE,
-    NVME_COMMAND_SIZE,
-    NVME_COMMAND_ID_MASK,
-    NVME_IOSQES_64_BYTES,
-    NVME_IOCQES_16_BYTES,
-    NVME_SECTOR_SIZE,
-
+    NVMEOF_TCP_ICREQ_HEADER_LEN,
+    NVMEOF_TCP_ICREQ_TOTAL_LEN,
+    NVMEOF_TCP_PDU_BASIC_HEADER_LEN,
+    NVMEOF_TCP_PORT,
     # Functions
-    pack_pdu_header,
-    unpack_pdu_header,
-    pack_nvme_command,
+    format_discovery_entry,
+    pack_async_event_request_command,
     pack_fabric_connect_command,
     pack_fabric_connect_data,
     pack_fabric_property_get_command,
     pack_fabric_property_set_command,
+    pack_get_features_command,
     pack_get_log_page_command,
     pack_identify_command,
-    pack_set_features_command,
-    pack_get_features_command,
-    pack_async_event_request_command,
+    pack_keep_alive_command,
+    pack_nvme_command,
+    pack_nvme_compare_command,
+    pack_nvme_flush_command,
     pack_nvme_read_command,
+    pack_nvme_reservation_acquire_command,
+    pack_nvme_reservation_register_command,
+    pack_nvme_reservation_release_command,
+    pack_nvme_reservation_report_command,
     pack_nvme_write_command,
     pack_nvme_write_command_host_data,
-    pack_nvme_flush_command,
-    pack_nvme_write_zeroes_command,
-    pack_nvme_compare_command,
     pack_nvme_write_uncorrectable_command,
-    pack_nvme_reservation_register_command,
-    pack_nvme_reservation_report_command,
-    pack_nvme_reservation_acquire_command,
-    pack_nvme_reservation_release_command,
-    pack_keep_alive_command,
+    pack_nvme_write_zeroes_command,
+    pack_pdu_header,
+    pack_set_features_command,
     parse_controller_capabilities,
     parse_discovery_log_page,
-    format_discovery_entry
+    unpack_pdu_header,
 )
 
 
@@ -353,7 +367,6 @@ class NVMeoFClient:
         oaes = controller_dict.get('oaes', 0)
 
         # Convert to ControllerInfo object
-        from nvmeof_client.models import ControllerInfo
         controller_info = ControllerInfo(
             vendor_id=controller_dict.get('vid', 0),
             subsystem_vendor_id=controller_dict.get('ssvid', 0),
@@ -605,7 +618,6 @@ class NVMeoFClient:
         protection_info_location = (dps >> 3) & 0x01  # Bit 3
 
         # Convert to NamespaceInfo object
-        from nvmeof_client.models import NamespaceInfo
         namespace_info = NamespaceInfo(
             namespace_id=nsid,
             namespace_size=ns_dict.get('nsze', 0),
@@ -1274,7 +1286,6 @@ class NVMeoFClient:
             ...         if nsid != 0xFFFFFFFF:
             ...             ns_info = client.identify_namespace(nsid)
         """
-        from .parsers import ChangedNamespaceListParser
 
         # Retrieve the log page (up to 4096 bytes for 1,024 entries)
         log_data = self.get_log_page(
@@ -2627,11 +2638,9 @@ class NVMeoFClient:
             self._send_get_log_page_pdu(command_id, LogPageIdentifier.DISCOVERY_LOG, header_size)
 
             # Small delay to allow response to arrive
-            import time
             time.sleep(0.1)
 
             # Check connection state before trying to receive
-            import select
             self._logger.debug(f"Socket info: fd={self._socket.fileno()}, connected={self._connected}")
             ready = select.select([self._socket], [], [], 0)
             if ready[0]:
@@ -2772,7 +2781,6 @@ class NVMeoFClient:
 
         Reference: NVMe-oF Base Specification Section 5.4
         """
-        from nvmeof_client.models import DiscoveryEntry, TransportType, AddressFamily
 
         # Get formatted entries from low-level method
         formatted_entries = self.discover_subsystems(max_entries)
@@ -3276,7 +3284,6 @@ class NVMeoFClient:
 
     def _generate_uuid(self) -> str:
         """Generate a simple UUID for host NQN."""
-        import uuid
         return str(uuid.uuid4())
 
     @property

@@ -6,7 +6,11 @@ as defined in the NVMe Base Specification.
 """
 
 from .base import BaseParser
-from ..models import ANAState, ANAGroupDescriptor, ANALogPage
+from ..models import (
+    ANAGroupDescriptor,
+    ANALogPage,
+    ANAState,
+)
 
 
 class ANALogPageParser(BaseParser):

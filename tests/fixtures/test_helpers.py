@@ -6,10 +6,16 @@ Common utilities and helpers used across multiple test modules.
 
 import os
 import socket
-from unittest.mock import Mock, MagicMock
-
+import struct
+from unittest.mock import (
+    MagicMock,
+    Mock,
+)
 from nvmeof_client.client import NVMeoFClient
-from nvmeof_client.models import ReservationType, ReservationAction
+from nvmeof_client.models import (
+    ReservationAction,
+    ReservationType,
+)
 
 
 def get_test_target_config():
@@ -63,7 +69,6 @@ def assert_command_structure(test_case, command_bytes: bytes, expected_opcode: i
     test_case.assertEqual(command_bytes[0], expected_opcode)
 
     # Check namespace ID (bytes 4-7)
-    import struct
     nsid = struct.unpack('<L', command_bytes[4:8])[0]
     test_case.assertEqual(nsid, expected_nsid)
 
@@ -73,7 +78,6 @@ def assert_reservation_data_structure(test_case, data_bytes: bytes,
     """Assert that reservation data has the expected structure."""
     test_case.assertEqual(len(data_bytes), 16)  # Reservation data is 16 bytes
 
-    import struct
     key, new_key = struct.unpack('<QQ', data_bytes)
     test_case.assertEqual(key, expected_key)
     test_case.assertEqual(new_key, expected_new_key)

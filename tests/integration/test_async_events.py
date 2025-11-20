@@ -5,9 +5,12 @@ These tests require a live NVMe-oF target and may require manual intervention
 to trigger certain events (e.g., ANA state changes, namespace modifications).
 """
 
-import pytest
 import time
-from nvmeof_client.models import AsyncEvent, AsyncEventType
+import pytest
+from nvmeof_client.models import (
+    AsyncEvent,
+    AsyncEventType,
+)
 
 
 @pytest.mark.integration

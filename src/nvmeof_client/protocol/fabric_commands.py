@@ -5,8 +5,16 @@ Command packing functions for NVMe-oF specific fabric commands.
 """
 
 import struct
-from .constants import NVME_COMMAND_SIZE, NVME_CONNECT_DATA_SIZE, NVME_CMD_FLAGS_SGL
-from .types import NVMeOpcode, FabricCommandType
+import uuid
+from .constants import (
+    NVME_CMD_FLAGS_SGL,
+    NVME_COMMAND_SIZE,
+    NVME_CONNECT_DATA_SIZE,
+)
+from .types import (
+    FabricCommandType,
+    NVMeOpcode,
+)
 
 
 def pack_fabric_connect_command(command_id: int, queue_id: int = 0, queue_size: int = 31, kato: int = 0) -> bytes:
@@ -154,7 +162,6 @@ def pack_fabric_connect_data(host_nqn: str, subsys_nqn: str,
 
     # Generate default host ID if not provided
     if host_id is None:
-        import uuid
         host_id = uuid.uuid4().bytes
 
     # Create 1024-byte connect data structure

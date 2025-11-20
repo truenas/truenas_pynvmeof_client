@@ -5,7 +5,10 @@ Command packing functions for NVMe admin commands.
 """
 
 import struct
-from .constants import NVME_COMMAND_SIZE, NVME_CMD_FLAGS_SGL
+from .constants import (
+    NVME_CMD_FLAGS_SGL,
+    NVME_COMMAND_SIZE,
+)
 from .types import NVMeOpcode
 
 

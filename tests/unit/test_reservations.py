@@ -5,24 +5,29 @@ Tests the reservation methods without requiring a live target.
 Uses mocking to simulate protocol responses and validate command generation.
 """
 
-import unittest
 import struct
-from unittest.mock import Mock, patch
-
+import unittest
+from unittest.mock import (
+    Mock,
+    patch,
+)
 from nvmeof_client.client import NVMeoFClient
 from nvmeof_client.exceptions import (
-    NVMeoFConnectionError,
     CommandError,
-    ProtocolError
+    NVMeoFConnectionError,
+    ProtocolError,
 )
 from nvmeof_client.models import (
-    ReservationType,
     ReservationAction,
+    ReservationInfo,
     ReservationStatus,
-    ReservationInfo
+    ReservationType,
 )
 from nvmeof_client.parsers import ReservationDataParser
-from nvmeof_client.protocol import PDUType, NVMeOpcode
+from nvmeof_client.protocol import (
+    NVMeOpcode,
+    PDUType,
+)
 from nvmeof_client.protocol.io_commands import (
     pack_nvme_reservation_register_command,
     pack_nvme_reservation_report_command,

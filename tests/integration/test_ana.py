@@ -5,9 +5,17 @@ Tests ANA log page retrieval and state querying against a live NVMe-oF target.
 Requires a target with ANA support enabled.
 """
 
+import time
 import pytest
-from nvmeof_client.models import ANAState, ANALogPage, ANAGroupDescriptor
-from nvmeof_client.exceptions import CommandError
+from nvmeof_client.exceptions import (
+    CommandError,
+    NVMeoFConnectionError,
+)
+from nvmeof_client.models import (
+    ANAGroupDescriptor,
+    ANALogPage,
+    ANAState,
+)
 
 
 @pytest.mark.integration
@@ -57,7 +65,6 @@ class TestGenericLogPageRetrieval:
 
     def test_get_log_page_discovery_not_allowed(self, discovery_client):
         """Test that get_log_page() correctly rejects calls on discovery subsystem."""
-        from nvmeof_client.exceptions import NVMeoFConnectionError
 
         # get_log_page() should not work on discovery subsystem
         # Discovery has its own dedicated discover_subsystems() method
@@ -347,7 +354,6 @@ class TestANAStateTransitions:
 
         # In a real failover test, we would trigger a path change here
         # For now, just verify the change count is stable
-        import time
         time.sleep(0.5)
 
         # Get state again

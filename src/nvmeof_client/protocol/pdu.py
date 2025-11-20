@@ -5,8 +5,15 @@ PDU header packing and unpacking functions for NVMe-oF TCP transport.
 """
 
 import struct
-from .constants import NVME_TCP_PFV_1_0, NVMEOF_TCP_ICREQ_TOTAL_LEN, NVMEOF_TCP_ICREQ_HEADER_LEN
-from .types import PDUType, PDUHeader
+from .constants import (
+    NVME_TCP_PFV_1_0,
+    NVMEOF_TCP_ICREQ_HEADER_LEN,
+    NVMEOF_TCP_ICREQ_TOTAL_LEN,
+)
+from .types import (
+    PDUHeader,
+    PDUType,
+)
 
 
 def pack_pdu_header(pdu_type: PDUType, flags: int, hlen: int, pdo: int, plen: int) -> bytes:

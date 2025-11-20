@@ -7,6 +7,8 @@ completion queue entries.
 
 from typing import Any
 from .base import BaseParser
+from ..exceptions import CommandError
+from ..protocol.status_codes import format_status_error
 
 
 class ResponseParser(BaseParser):
@@ -42,16 +44,7 @@ class ResponseParser(BaseParser):
         status_code = (status >> 1) & 0x3FF
         if status_code != 0:
             # Format enhanced error message with status description
-            try:
-                from ..protocol.status_codes import format_status_error
-                error_message = format_status_error(status_code, command_id)
-            except ImportError:
-                # Fallback to basic formatting
-                error_message = f"Command failed with status {status_code:02x}"
-                if command_id is not None:
-                    error_message = f"Command {command_id} " + error_message
-
-            from ..exceptions import CommandError
+            error_message = format_status_error(status_code, command_id)
             raise CommandError(error_message, status_code, command_id)
 
         return {

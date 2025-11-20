@@ -5,19 +5,24 @@ Tests the main client functionality including connection management,
 command sending, and error handling.
 """
 
-import unittest
-from unittest.mock import Mock, patch
 import socket
 import struct
-
+import unittest
+from unittest.mock import (
+    Mock,
+    patch,
+)
 from nvmeof_client.client import NVMeoFClient
 from nvmeof_client.exceptions import (
+    CommandError,
     NVMeoFConnectionError,
     NVMeoFTimeoutError,
-    CommandError,
 )
-from nvmeof_client.protocol import PDUType, NVMeOpcode
 from nvmeof_client.parsers.response import ResponseParser
+from nvmeof_client.protocol import (
+    NVMeOpcode,
+    PDUType,
+)
 
 
 class TestNVMeoFClient(unittest.TestCase):

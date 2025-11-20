@@ -9,6 +9,8 @@ References:
 - NVMe Base Specification Section 1.6 (Status Codes)
 """
 
+from .protocol.status_codes import decode_status_code
+
 
 class NVMeoFError(Exception):
     """Base exception class for all NVMe-oF client errors."""
@@ -70,14 +72,9 @@ class CommandError(NVMeoFError):
 
         # Decode status code if provided
         if status_code is not None:
-            try:
-                from .protocol.status_codes import decode_status_code
-                description, spec_ref, _ = decode_status_code(status_code << 1)
-                self.status_description = description
-                self.spec_reference = spec_ref
-            except ImportError:
-                # Fallback if status_codes module not available
-                pass
+            description, spec_ref, _ = decode_status_code(status_code << 1)
+            self.status_description = description
+            self.spec_reference = spec_ref
 
 
 class ProtocolError(NVMeoFError):

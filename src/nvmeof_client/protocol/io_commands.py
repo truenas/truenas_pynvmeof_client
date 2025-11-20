@@ -6,10 +6,16 @@ Command packing functions for NVMe I/O commands (Read, Write, etc.).
 
 import struct
 # from .constants import *
-from .constants import NVME_COMMAND_SIZE, NVME_CMD_FLAGS_SGL, NVME_SECTOR_SIZE
-
+from .constants import (
+    NVME_CMD_FLAGS_SGL,
+    NVME_COMMAND_SIZE,
+    NVME_SECTOR_SIZE,
+)
 from .types import NVMeOpcode
-from ..models import ReservationType, ReservationAction
+from ..models import (
+    ReservationAction,
+    ReservationType,
+)
 
 
 def pack_nvme_read_command(command_id: int, nsid: int, start_lba: int, block_count: int,
