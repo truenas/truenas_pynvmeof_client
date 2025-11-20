@@ -5,7 +5,7 @@ This module handles parsing of NVMe controller capability and status
 register data structures.
 """
 
-from typing import Dict, Any
+from typing import Any
 from .base import BaseParser
 
 
@@ -13,7 +13,7 @@ class CapabilityParser(BaseParser):
     """Parser for NVMe controller capabilities and status."""
 
     @classmethod
-    def parse_controller_capabilities(cls, cap_data: bytes) -> Dict[str, Any]:
+    def parse_controller_capabilities(cls, cap_data: bytes) -> dict[str, Any]:
         """
         Parse Controller Capabilities Register (CAP) data.
 
@@ -55,7 +55,7 @@ class CapabilityParser(BaseParser):
         }
 
     @classmethod
-    def parse_controller_status(cls, csts_data: bytes) -> Dict[str, Any]:
+    def parse_controller_status(cls, csts_data: bytes) -> dict[str, Any]:
         """
         Parse Controller Status Register (CSTS) data.
 

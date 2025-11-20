@@ -5,7 +5,7 @@ This module handles parsing of NVMe-oF Discovery Log Page data structures
 as defined in the NVMe-oF Base Specification.
 """
 
-from typing import Dict, Any
+from typing import Any
 from .base import BaseParser
 
 
@@ -13,7 +13,7 @@ class DiscoveryDataParser(BaseParser):
     """Parser for NVMe-oF Discovery Log Page data structures."""
 
     @classmethod
-    def parse_discovery_log_page(cls, data: bytes) -> Dict[str, Any]:
+    def parse_discovery_log_page(cls, data: bytes) -> dict[str, Any]:
         """
         Parse Discovery Log Page into discovery log data with generation counter.
 
@@ -54,7 +54,7 @@ class DiscoveryDataParser(BaseParser):
         }
 
     @classmethod
-    def _parse_single_discovery_entry(cls, data: bytes) -> Dict[str, Any]:
+    def _parse_single_discovery_entry(cls, data: bytes) -> dict[str, Any]:
         """
         Parse a single discovery log entry.
 
@@ -105,7 +105,7 @@ class DiscoveryDataParser(BaseParser):
         }
 
     @staticmethod
-    def format_discovery_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
+    def format_discovery_entry(entry: dict[str, Any]) -> dict[str, Any]:
         """
         Format discovery entry with human-readable field names.
 

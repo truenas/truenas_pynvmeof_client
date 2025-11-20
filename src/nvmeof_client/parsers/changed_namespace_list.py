@@ -7,7 +7,6 @@ Reference: NVM Express Base Specification 2.3
 """
 
 import struct
-from typing import List
 from .base import BaseParser
 
 
@@ -15,7 +14,7 @@ class ChangedNamespaceListParser(BaseParser):
     """Parser for Changed Attached Namespace List log page."""
 
     @classmethod
-    def parse_changed_namespace_list(cls, data: bytes) -> List[int]:
+    def parse_changed_namespace_list(cls, data: bytes) -> list[int]:
         """
         Parse Changed Attached Namespace List log page.
 
@@ -77,7 +76,7 @@ class ChangedNamespaceListParser(BaseParser):
         return changed_namespaces
 
     @classmethod
-    def format_changed_namespace_list(cls, nsids: List[int]) -> str:
+    def format_changed_namespace_list(cls, nsids: list[int]) -> str:
         """
         Format changed namespace list for human-readable display.
 

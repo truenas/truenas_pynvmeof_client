@@ -11,7 +11,7 @@ References:
 """
 
 from dataclasses import dataclass
-from typing import Optional, List, Dict, Any
+from typing import Any
 from enum import IntEnum
 
 
@@ -154,13 +154,13 @@ class ControllerInfo:
     critical_composite_temp_threshold: int  # CCTEMP: bytes 268-269, critical composite temperature threshold
 
     # NVMe-oF Specific
-    nvmeof_attributes: Optional[int] = None  # NVMe-oF specific attributes if applicable
+    nvmeof_attributes: int | None = None  # NVMe-oF specific attributes if applicable
 
     # Version Information
-    nvme_version: Optional[str] = None  # VER: bytes 80-83, NVMe version
+    nvme_version: str | None = None  # VER: bytes 80-83, NVMe version
 
     # Additional capabilities (can be extended)
-    raw_data: Optional[bytes] = None    # Raw identify controller data for debugging
+    raw_data: bytes | None = None    # Raw identify controller data for debugging
 
 
 @dataclass
@@ -194,7 +194,7 @@ class NamespaceInfo:
     preferred_write_granularity: int    # NPWG: preferred write granularity
     preferred_write_alignment: int      # NPWA: preferred write alignment
 
-    raw_data: Optional[bytes] = None    # Raw identify namespace data for debugging
+    raw_data: bytes | None = None    # Raw identify namespace data for debugging
 
 
 @dataclass
@@ -219,7 +219,7 @@ class DiscoveryEntry:
     subsystem_nqn: str                  # SUBNQN: bytes 296-551, subsystem NQN
 
     # Optional Fields
-    transport_requirements: Optional[int] = None  # TREQ: byte 3, transport requirements
+    transport_requirements: int | None = None  # TREQ: byte 3, transport requirements
 
     @property
     def is_discovery_subsystem(self) -> bool:
@@ -255,8 +255,8 @@ class ConnectionInfo:
     is_discovery_connection: bool      # Connection is to discovery subsystem
 
     # Statistics (optional)
-    commands_sent: Optional[int] = None      # Number of commands sent
-    bytes_transferred: Optional[int] = None  # Total bytes transferred
+    commands_sent: int | None = None      # Number of commands sent
+    bytes_transferred: int | None = None  # Total bytes transferred
 
 
 @dataclass
@@ -276,7 +276,7 @@ class QueueInfo:
     is_created: bool = False           # Queue has been created on controller
 
     # Statistics (optional)
-    commands_processed: Optional[int] = None  # Number of commands processed through this queue
+    commands_processed: int | None = None  # Number of commands processed through this queue
 
 
 @dataclass
@@ -330,10 +330,10 @@ class ReservationStatus:
     generation: int                    # REGCTL: bytes 0-3, reservation generation counter
     reservation_type: ReservationType  # RTYPE: byte 22, current reservation type
     reservation_holder: int            # Controller ID of current reservation holder
-    registered_controllers: List[int]  # List of registered controller IDs
+    registered_controllers: list[int]  # List of registered controller IDs
 
     # Reservation keys for registered controllers (from Registered Controller Data)
-    reservation_keys: Dict[int, int]   # controller_id -> reservation_key mapping
+    reservation_keys: dict[int, int]   # controller_id -> reservation_key mapping
 
     @property
     def is_reserved(self) -> bool:
@@ -360,7 +360,7 @@ class ReservationInfo:
     status_code: int                   # NVMe status code from command completion
 
     # Optional detailed status
-    reservation_status: Optional[ReservationStatus] = None  # Full reservation status if requested
+    reservation_status: ReservationStatus | None = None  # Full reservation status if requested
 
 
 class AsyncEventType(IntEnum):
@@ -434,7 +434,7 @@ class AsyncEvent:
     raw_dword0: int
 
     # Optional: Event Specific Parameter from Dword 1 (for some events)
-    event_specific_param: Optional[int] = None
+    event_specific_param: int | None = None
 
     @property
     def is_notice(self) -> bool:
@@ -472,7 +472,7 @@ class ANAGroupDescriptor:
     num_namespaces: int         # NNV: bytes 07:04, Number of NSID values in this descriptor
     change_count: int           # CHGC: bytes 15:08, Change count for this ANA Group (0 = not reported)
     ana_state: ANAState         # ANAS: byte 16 bits 03:00, Current ANA state for this group
-    namespace_ids: List[int]    # Bytes 35:32+, List of NSIDs in this ANA Group (ascending order)
+    namespace_ids: list[int]    # Bytes 35:32+, List of NSIDs in this ANA Group (ascending order)
 
     @property
     def is_accessible(self) -> bool:
@@ -498,16 +498,16 @@ class ANALogPage:
 
     change_count: int                      # Bytes 07:00, Log-level change count (increments on any change)
     num_ana_group_descriptors: int         # Bytes 15:08, Number of ANA Group Descriptors in this log
-    groups: List[ANAGroupDescriptor]       # List of ANA Group Descriptors (one per ANA Group)
+    groups: list[ANAGroupDescriptor]       # List of ANA Group Descriptors (one per ANA Group)
 
-    def get_group(self, ana_group_id: int) -> Optional[ANAGroupDescriptor]:
+    def get_group(self, ana_group_id: int) -> ANAGroupDescriptor | None:
         """Get descriptor for a specific ANA Group ID, or None if not found."""
         for group in self.groups:
             if group.ana_group_id == ana_group_id:
                 return group
         return None
 
-    def get_namespace_state(self, nsid: int) -> Optional[ANAState]:
+    def get_namespace_state(self, nsid: int) -> ANAState | None:
         """Get the ANA state for a specific namespace ID, or None if not found."""
         for group in self.groups:
             if nsid in group.namespace_ids:
@@ -515,18 +515,18 @@ class ANALogPage:
         return None
 
     @property
-    def optimized_groups(self) -> List[ANAGroupDescriptor]:
+    def optimized_groups(self) -> list[ANAGroupDescriptor]:
         """Get list of ANA Groups in Optimized state."""
         return [g for g in self.groups if g.ana_state == ANAState.OPTIMIZED]
 
     @property
-    def accessible_groups(self) -> List[ANAGroupDescriptor]:
+    def accessible_groups(self) -> list[ANAGroupDescriptor]:
         """Get list of ANA Groups in accessible states (Optimized or Non-Optimized)."""
         return [g for g in self.groups if g.is_accessible]
 
 
 # Type aliases for backward compatibility with legacy dictionary-based APIs
 # These should be deprecated in favor of the typed dataclass models above
-ControllerData = Dict[str, Any]  # Legacy controller information format
-NamespaceData = Dict[str, Any]   # Legacy namespace information format
-DiscoveryData = Dict[str, Any]   # Legacy discovery information format
+ControllerData = dict[str, Any]  # Legacy controller information format
+NamespaceData = dict[str, Any]   # Legacy namespace information format
+DiscoveryData = dict[str, Any]   # Legacy discovery information format

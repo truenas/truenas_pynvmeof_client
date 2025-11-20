@@ -5,7 +5,7 @@ This module handles parsing of basic NVMe response structures and
 completion queue entries.
 """
 
-from typing import Dict, Any
+from typing import Any
 from .base import BaseParser
 
 
@@ -13,7 +13,7 @@ class ResponseParser(BaseParser):
     """Parser for NVMe response and completion data structures."""
 
     @classmethod
-    def parse_response(cls, data: bytes, expected_command_id: int) -> Dict[str, Any]:
+    def parse_response(cls, data: bytes, expected_command_id: int) -> dict[str, Any]:
         """
         Parse NVMe response data.
 

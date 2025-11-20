@@ -11,7 +11,6 @@ References:
 """
 
 from enum import IntEnum
-from typing import Dict, Tuple
 
 
 class NVMeStatusType(IntEnum):
@@ -124,7 +123,7 @@ class NVMeFabricStatus(IntEnum):
 
 
 # Status code descriptions with spec references
-NVME_STATUS_DESCRIPTIONS: Dict[Tuple[int, int], Tuple[str, str]] = {
+NVME_STATUS_DESCRIPTIONS: dict[tuple[int, int], tuple[str, str]] = {
     # Generic Command Status (SCT=0)
     (0, 0x00): ("Successful Completion", "NVM Express Base Specification Rev 2.1, Figure 95"),
     (0, 0x01): ("Invalid Command Opcode", "NVM Express Base Specification Rev 2.1, Figure 95"),
@@ -206,7 +205,7 @@ NVME_STATUS_DESCRIPTIONS: Dict[Tuple[int, int], Tuple[str, str]] = {
 }
 
 
-def decode_status_code(status_word: int) -> Tuple[str, str, str]:
+def decode_status_code(status_word: int) -> tuple[str, str, str]:
     """
     Decode NVMe status word into human-readable information.
 

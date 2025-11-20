@@ -7,7 +7,6 @@ Common utilities and helpers used across multiple test modules.
 import os
 import socket
 from unittest.mock import Mock, MagicMock
-from typing import List
 
 from nvmeof_client.client import NVMeoFClient
 from nvmeof_client.models import ReservationType, ReservationAction
@@ -44,7 +43,7 @@ def create_mock_client(connected: bool = True, discovery_mode: bool = False):
     return client
 
 
-def create_mock_socket_with_responses(responses: List[bytes]):
+def create_mock_socket_with_responses(responses: list[bytes]):
     """Create a mock socket that returns the given responses in sequence."""
     mock_socket = MagicMock()
     mock_socket.recv.side_effect = responses

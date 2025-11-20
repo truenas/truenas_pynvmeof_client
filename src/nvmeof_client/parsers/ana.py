@@ -5,7 +5,6 @@ This module handles parsing of the ANA log page data structures
 as defined in the NVMe Base Specification.
 """
 
-from typing import List
 from .base import BaseParser
 from ..models import ANAState, ANAGroupDescriptor, ANALogPage
 
@@ -68,7 +67,7 @@ class ANALogPageParser(BaseParser):
         return change_count, num_descriptors
 
     @classmethod
-    def _parse_ana_group_descriptors(cls, data: bytes, num_descriptors: int) -> List[ANAGroupDescriptor]:
+    def _parse_ana_group_descriptors(cls, data: bytes, num_descriptors: int) -> list[ANAGroupDescriptor]:
         """
         Parse list of ANA Group Descriptors.
 
@@ -164,7 +163,7 @@ class ANALogPageParser(BaseParser):
         return descriptor, descriptor_size
 
     @classmethod
-    def _parse_namespace_id_list(cls, data: bytes, num_namespaces: int) -> List[int]:
+    def _parse_namespace_id_list(cls, data: bytes, num_namespaces: int) -> list[int]:
         """
         Parse list of namespace IDs from ANA Group Descriptor.
 

@@ -5,7 +5,7 @@ This module handles parsing of NVMe Reservation Report data structures
 as defined in the NVMe Base Specification.
 """
 
-from typing import Dict, Any, List
+from typing import Any
 from .base import BaseParser
 
 
@@ -13,7 +13,7 @@ class ReservationDataParser(BaseParser):
     """Parser for NVMe Reservation Report data structures."""
 
     @classmethod
-    def parse_reservation_report(cls, data: bytes, extended_format: bool = True) -> Dict[str, Any]:
+    def parse_reservation_report(cls, data: bytes, extended_format: bool = True) -> dict[str, Any]:
         """
         Parse NVMe Reservation Report data structure.
 
@@ -56,7 +56,7 @@ class ReservationDataParser(BaseParser):
         }
 
     @classmethod
-    def _parse_header(cls, data: bytes) -> Dict[str, Any]:
+    def _parse_header(cls, data: bytes) -> dict[str, Any]:
         """
         Parse reservation status header (24 bytes, same for both formats).
 
@@ -84,7 +84,7 @@ class ReservationDataParser(BaseParser):
         }
 
     @classmethod
-    def _parse_standard_registrants(cls, data: bytes, num_registrants: int = None) -> List[Dict[str, Any]]:
+    def _parse_standard_registrants(cls, data: bytes, num_registrants: int = None) -> list[dict[str, Any]]:
         """
         Parse standard format registrant data structures (24 bytes each).
 
@@ -138,7 +138,7 @@ class ReservationDataParser(BaseParser):
         return registrants
 
     @classmethod
-    def _parse_extended_registrants(cls, data: bytes, num_registrants: int = None) -> List[Dict[str, Any]]:
+    def _parse_extended_registrants(cls, data: bytes, num_registrants: int = None) -> list[dict[str, Any]]:
         """
         Parse extended format registrant data structures (64 bytes each).
 

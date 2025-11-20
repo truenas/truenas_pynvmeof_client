@@ -6,7 +6,7 @@ as defined in the NVMe Base Specification.
 """
 
 import logging
-from typing import Dict, Any, List
+from typing import Any
 from .base import BaseParser
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ class NamespaceDataParser(BaseParser):
     """Parser for NVMe Identify Namespace data structures."""
 
     @classmethod
-    def parse(cls, data: bytes, nsid: int = None) -> Dict[str, Any]:
+    def parse(cls, data: bytes, nsid: int = None) -> dict[str, Any]:
         """
         Parse NVMe Identify Namespace data structure.
 
@@ -176,7 +176,7 @@ class NamespaceDataParser(BaseParser):
         return parsed
 
     @classmethod
-    def _parse_lba_formats(cls, data: bytes) -> List[Dict[str, Any]]:
+    def _parse_lba_formats(cls, data: bytes) -> list[dict[str, Any]]:
         """
         Parse LBA Format Support entries.
 
@@ -210,7 +210,7 @@ class NamespaceDataParser(BaseParser):
         return lbaf_entries
 
     @classmethod
-    def _calculate_logical_block_size(cls, flbas: int, lbaf_entries: List[Dict[str, Any]]) -> int:
+    def _calculate_logical_block_size(cls, flbas: int, lbaf_entries: list[dict[str, Any]]) -> int:
         """
         Calculate logical block size from FLBAS and LBA format entries.
 

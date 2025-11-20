@@ -4,7 +4,7 @@ NVMe Asynchronous Event parsing.
 This module handles parsing of NVMe Asynchronous Event Request completions.
 """
 
-from typing import Dict, Any
+from typing import Any
 from .base import BaseParser
 from ..models import (
     AsyncEvent,
@@ -18,7 +18,7 @@ class AsyncEventParser(BaseParser):
     """Parser for NVMe Asynchronous Event completions."""
 
     @classmethod
-    def parse_async_event_completion(cls, dw0: int, dw1: int) -> Dict[str, Any]:
+    def parse_async_event_completion(cls, dw0: int, dw1: int) -> dict[str, Any]:
         """
         Parse Asynchronous Event Request completion queue entry.
 

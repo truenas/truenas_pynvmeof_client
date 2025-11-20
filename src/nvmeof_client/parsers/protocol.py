@@ -5,7 +5,7 @@ This module handles parsing of NVMe-oF protocol data units (PDUs)
 and basic protocol structures.
 """
 
-from typing import Dict, Any
+from typing import Any
 from .base import BaseParser
 
 
@@ -13,7 +13,7 @@ class ProtocolParser(BaseParser):
     """Parser for NVMe-oF protocol structures."""
 
     @classmethod
-    def parse_pdu_header(cls, header_data: bytes) -> Dict[str, Any]:
+    def parse_pdu_header(cls, header_data: bytes) -> dict[str, Any]:
         """
         Parse basic NVMe-oF TCP PDU header.
 
@@ -42,7 +42,7 @@ class ProtocolParser(BaseParser):
         }
 
     @classmethod
-    def parse_connect_response(cls, data: bytes) -> Dict[str, Any]:
+    def parse_connect_response(cls, data: bytes) -> dict[str, Any]:
         """
         Parse NVMe-oF Connect command response data.
 

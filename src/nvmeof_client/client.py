@@ -13,7 +13,7 @@ import socket
 import struct
 import time
 import logging
-from typing import Optional, Tuple, Dict, Any, List
+from typing import Any
 
 from .exceptions import (
     NVMeoFConnectionError,
@@ -113,9 +113,9 @@ class NVMeoFClient:
             client.disconnect()
     """
 
-    def __init__(self, host: str, subsystem_nqn: Optional[str] = None,
+    def __init__(self, host: str, subsystem_nqn: str | None = None,
                  port: int = NVMEOF_TCP_PORT,
-                 timeout: Optional[float] = None, host_nqn: Optional[str] = None,
+                 timeout: float | None = None, host_nqn: str | None = None,
                  kato: int = 0):
         """
         Initialize NVMe-oF TCP client.
@@ -136,8 +136,8 @@ class NVMeoFClient:
         self._subsystem_nqn = subsystem_nqn  # Subsystem NQN to connect to
         self._host_nqn = host_nqn  # Store user-provided Host NQN or None
         self._kato = kato  # Keep Alive Timeout in milliseconds
-        self._socket: Optional[socket.socket] = None
-        self._io_socket: Optional[socket.socket] = None  # Separate socket for I/O queue
+        self._socket: socket.socket | None = None
+        self._io_socket: socket.socket | None = None  # Separate socket for I/O queue
         self._connected = False
         self._admin_command_id_counter = 1  # Separate command ID sequence for admin queue
         self._io_command_id_counter = 1     # Separate command ID sequence for I/O queue
@@ -163,7 +163,7 @@ class NVMeoFClient:
         self._is_discovery_subsystem = False
 
         # Namespace information cache for performance optimization
-        self._namespace_info_cache: Dict[int, Dict[str, Any]] = {}  # Cache namespace info by NSID
+        self._namespace_info_cache: dict[int, dict[str, Any]] = {}  # Cache namespace info by NSID
 
         # I/O queue tracking
         self._io_queues_setup = False  # Track if I/O queues are established
@@ -171,9 +171,9 @@ class NVMeoFClient:
         self._controller_id = None     # Controller ID assigned by target
 
         # Asynchronous event tracking
-        self._outstanding_async_requests: List[int] = []  # Command IDs of outstanding async event requests
+        self._outstanding_async_requests: list[int] = []  # Command IDs of outstanding async event requests
         self._async_events_enabled = False  # Track if async events are enabled via Set Features
-        self._aerl: Optional[int] = None    # Asynchronous Event Request Limit from controller
+        self._aerl: int | None = None    # Asynchronous Event Request Limit from controller
 
     def connect(self, subsystem_nqn: str = None) -> None:
         """
@@ -279,8 +279,8 @@ class NVMeoFClient:
 
             self._logger.info("Disconnected from target")
 
-    def send_command(self, opcode: int, nsid: int = 0, data: Optional[bytes] = None,
-                     timeout: Optional[float] = None) -> Dict[str, Any]:
+    def send_command(self, opcode: int, nsid: int = 0, data: bytes | None = None,
+                     timeout: float | None = None) -> dict[str, Any]:
         """
         Send NVMe command to target and receive response.
 
@@ -392,7 +392,7 @@ class NVMeoFClient:
 
         return controller_info
 
-    def identify_controller(self) -> Dict[str, Any]:
+    def identify_controller(self) -> dict[str, Any]:
         """
         Send Identify Controller command to retrieve controller information.
 
@@ -625,7 +625,7 @@ class NVMeoFClient:
 
         return namespace_info
 
-    def identify_namespace(self, nsid: int) -> Dict[str, Any]:
+    def identify_namespace(self, nsid: int) -> dict[str, Any]:
         """
         Send Identify Namespace command to retrieve namespace information.
 
@@ -784,7 +784,7 @@ class NVMeoFClient:
             self._logger.error(f"Identify Namespace {nsid} failed: {e}")
             raise
 
-    def list_namespaces(self) -> List[int]:
+    def list_namespaces(self) -> list[int]:
         """
         Get list of active namespace IDs.
 
@@ -1209,7 +1209,7 @@ class NVMeoFClient:
 
         return ana_log
 
-    def get_ana_state(self) -> Dict[int, ANAState]:
+    def get_ana_state(self) -> dict[int, ANAState]:
         """
         Get simplified ANA state mapping for all ANA Groups.
 
@@ -1238,7 +1238,7 @@ class NVMeoFClient:
 
         return state_map
 
-    def get_changed_namespace_list(self) -> List[int]:
+    def get_changed_namespace_list(self) -> list[int]:
         """
         Get the list of namespaces that have changed since last query.
 
@@ -2317,7 +2317,7 @@ class NVMeoFClient:
             self._logger.error(f"Reservation release operation failed: {e}")
             raise
 
-    def get_controller_capabilities(self) -> Dict[str, Any]:
+    def get_controller_capabilities(self) -> dict[str, Any]:
         """
         Get Controller Capabilities using Property Get command.
 
@@ -2817,7 +2817,7 @@ class NVMeoFClient:
         return self._connected and self._is_discovery_subsystem
 
     @property
-    def connected_subsystem_nqn(self) -> Optional[str]:
+    def connected_subsystem_nqn(self) -> str | None:
         """Get the NQN of the currently connected subsystem."""
         return self._connected_subsystem_nqn if self._connected else None
 
@@ -2921,7 +2921,7 @@ class NVMeoFClient:
         header = pack_pdu_header(PDUType.ICREQ, 0, header_len, 0, total_len)
         sock.sendall(header + data)
 
-    def _receive_pdu_on_socket(self, sock: socket.socket) -> Tuple:
+    def _receive_pdu_on_socket(self, sock: socket.socket) -> tuple[PDUHeader, bytes]:
         """Receive PDU on specific socket."""
         # Read PDU header (8 bytes)
         header_data = self._recv_exactly(sock, 8)
@@ -3550,7 +3550,7 @@ class NVMeoFClient:
         self._socket.sendall(full_pdu)
 
     def _send_command_pdu(self, opcode: int, command_id: int, nsid: int,
-                          data: Optional[bytes] = None) -> None:
+                          data: bytes | None = None) -> None:
         """
         Send NVMe command as PDU.
 
@@ -3599,7 +3599,7 @@ class NVMeoFClient:
         # Send header and data
         self._socket.sendall(header + data)
 
-    def _receive_pdu(self) -> Tuple[PDUHeader, bytes]:
+    def _receive_pdu(self) -> tuple[PDUHeader, bytes]:
         """
         Receive PDU header and data.
 
@@ -3649,7 +3649,7 @@ class NVMeoFClient:
 
         return header, data
 
-    def _receive_response(self, command_id: int, timeout: Optional[float]) -> Dict[str, Any]:
+    def _receive_response(self, command_id: int, timeout: float | None) -> dict[str, Any]:
         """
         Receive and parse command response.
 
@@ -4046,7 +4046,7 @@ class NVMeoFClient:
                 pass
             self._io_socket = None
 
-    def enable_async_events(self, event_mask: Optional[int] = None) -> None:
+    def enable_async_events(self, event_mask: int | None = None) -> None:
         """
         Enable asynchronous event notifications via Set Features command.
 
@@ -4151,7 +4151,7 @@ class NVMeoFClient:
         self._logger.info(f"Submitted {count} async event requests "
                           f"(total outstanding: {len(self._outstanding_async_requests)})")
 
-    def poll_async_events(self, timeout: Optional[float] = 0.1) -> List[AsyncEvent]:
+    def poll_async_events(self, timeout: float | None = 0.1) -> list[AsyncEvent]:
         """
         Poll for completed asynchronous event notifications.
 

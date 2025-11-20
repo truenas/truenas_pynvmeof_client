@@ -5,7 +5,7 @@ This module handles parsing of NVMe Identify Controller data structures
 as defined in the NVMe Base Specification.
 """
 
-from typing import Dict, Any
+from typing import Any
 from .base import BaseParser
 
 
@@ -13,7 +13,7 @@ class ControllerDataParser(BaseParser):
     """Parser for NVMe Identify Controller data structures."""
 
     @classmethod
-    def parse(cls, data: bytes) -> Dict[str, Any]:
+    def parse(cls, data: bytes) -> dict[str, Any]:
         """
         Parse NVMe Identify Controller data structure.
 

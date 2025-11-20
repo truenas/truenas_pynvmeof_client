@@ -5,7 +5,7 @@ Utility functions for parsing and formatting NVMe-oF data structures.
 """
 
 import struct
-from typing import Dict, Any
+from typing import Any
 
 
 def pack_nvme_command(opcode: int, flags: int, command_id: int, nsid: int = 0) -> bytes:
@@ -30,7 +30,7 @@ def pack_nvme_command(opcode: int, flags: int, command_id: int, nsid: int = 0) -
     return cmd
 
 
-def parse_controller_capabilities(cap_data: bytes) -> Dict[str, Any]:
+def parse_controller_capabilities(cap_data: bytes) -> dict[str, Any]:
     """
     Parse Controller Capabilities Register (CAP) data.
 
@@ -73,7 +73,7 @@ def parse_controller_capabilities(cap_data: bytes) -> Dict[str, Any]:
     }
 
 
-def parse_discovery_log_page(data: bytes) -> Dict[str, Any]:
+def parse_discovery_log_page(data: bytes) -> dict[str, Any]:
     """
     Parse Discovery Log Page into discovery log data with generation counter.
 
@@ -115,7 +115,7 @@ def parse_discovery_log_page(data: bytes) -> Dict[str, Any]:
     }
 
 
-def _parse_single_discovery_entry(data: bytes) -> Dict[str, Any]:
+def _parse_single_discovery_entry(data: bytes) -> dict[str, Any]:
     """
     Parse a single discovery log entry.
 
@@ -161,7 +161,7 @@ def _parse_single_discovery_entry(data: bytes) -> Dict[str, Any]:
     }
 
 
-def format_discovery_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
+def format_discovery_entry(entry: dict[str, Any]) -> dict[str, Any]:
     """
     Format discovery entry with human-readable field names.
 
