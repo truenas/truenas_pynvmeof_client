@@ -1,0 +1,7 @@
+# Include essential documentation
+include README.md
+include CHANGELOG.md
+include LICENSE
+
+# Include package configuration
+include pyproject.toml
